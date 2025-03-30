@@ -23,7 +23,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions: {}
+permissions:
+  actions: read
 
 jobs:
   run-tests:
