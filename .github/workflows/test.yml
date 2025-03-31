@@ -156,10 +156,14 @@ jobs:
             FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
             ALL_TESTS_FILE="artifacts/pr-${PR_ID}/all_tests.txt"
             REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
+            - name: Debug Tox Environment
+            run: |
+              echo "Tox env: ${{ matrix.tox_env }}"
+              tox -e ${{ matrix.tox_env }} -- --collect-only -q -v
+
         
             # Use tox to collect all tests
-            tox -e ${{ matrix.tox_env }} -- --collect-only --quiet > $ALL_TESTS_FILE || true
-
+            tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep "::" > $ALL_TESTS_FILE || true
         
             if [[ -f "$PREV_RESULTS" ]]; then
               echo "Extracting failed test cases from previous run..."
