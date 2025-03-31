@@ -148,14 +148,14 @@ jobs:
             echo "No previous test results found for PR-${PR_ID}. Running fresh tests."
           fi
 
-          - name: Extract Failed and Passed Tests from Previous Run
-          shell: bash
-          run: |
-            mkdir -p artifacts/pr-${PR_ID}
-            PREV_RESULTS="artifacts/pr-${PR_ID}/test_results.json"
-            FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
-            ALL_TESTS_FILE="artifacts/pr-${PR_ID}/all_tests.txt"
-            REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
+      - name: Extract Failed and Passed Tests from Previous Run
+        shell: bash
+        run: |
+          mkdir -p artifacts/pr-${PR_ID}
+          PREV_RESULTS="artifacts/pr-${PR_ID}/test_results.json"
+          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
+          ALL_TESTS_FILE="artifacts/pr-${PR_ID}/all_tests.txt"
+          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
             - name: Debug Tox Environment
             run: |
               echo "Tox env: ${{ matrix.tox_env }}"
@@ -163,22 +163,22 @@ jobs:
 
         
             # Use tox to collect all tests
-            tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep "::" > $ALL_TESTS_FILE || true
+          tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep "::" > $ALL_TESTS_FILE || true
         
-            if [[ -f "$PREV_RESULTS" ]]; then
-              echo "Extracting failed test cases from previous run..."
-              cat $PREV_RESULTS | jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' > $FAILED_TESTS_FILE
-            else
-              echo "No previous test results found. Skipping extraction."
-              touch $FAILED_TESTS_FILE
-            fi
+          if [[ -f "$PREV_RESULTS" ]]; then
+            echo "Extracting failed test cases from previous run..."
+            cat $PREV_RESULTS | jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' > $FAILED_TESTS_FILE
+          else
+            echo "No previous test results found. Skipping extraction."
+            touch $FAILED_TESTS_FILE
+          fi
         
-            if [[ -s "$FAILED_TESTS_FILE" ]]; then
-              echo "Failed tests from the previous run:"
-              cat $FAILED_TESTS_FILE
-            else
-              echo "No previously failed tests found."
-            fi
+          if [[ -s "$FAILED_TESTS_FILE" ]]; then
+            echo "Failed tests from the previous run:"
+            cat $FAILED_TESTS_FILE
+          else
+            echo "No previously failed tests found."
+          fi
         
 
       - name: Run Previously Failed Tests First
