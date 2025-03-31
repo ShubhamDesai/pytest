@@ -18,6 +18,7 @@ on:
 
 env:
   PYTEST_ADDOPTS: "--color=yes"
+  SETUPTOOLS_SCM_PRETEND_VERSION_FOR_PYTEST: "7.3.1.dev0"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
