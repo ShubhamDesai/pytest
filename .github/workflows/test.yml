@@ -166,7 +166,8 @@ jobs:
         
             # Use tox to collect all tests
           # tox -e $#{{ matrix.tox_env }} -- --collect-only --quiet | grep "::" > $ALL_TESTS_FILE || true
-          tox -e ${{ matrix.tox_env }} -- --collect-only -v | grep -v "SKIP" | sed -E 's/.*<Function (.*?)>$/\1/' > $ALL_TESTS_FILE || true
+          tox -e ${{ matrix.tox_env }} -- --collect-only -v | grep -v "SKIP" | grep -E "<(Function|Class|Module) " | sed -E 's/.*<(Function|Class|Module) ([^>]*)>.*/\2/' > $ALL_TESTS_FILE || true
+
 
           if [[ -f "$PREV_RESULTS" ]]; then
             echo "Extracting failed test cases from previous run..."
