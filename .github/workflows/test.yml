@@ -212,7 +212,7 @@ jobs:
 
           if [[ -s "$FAILED_TESTS_FILE" ]]; then
             echo "Rerunning previously failed tests using tox env ${{ matrix.tox_env }}..."
-            tox -e ${{ matrix.tox_env }} --installpkg=pytest-json-report -- --tb=short --json-report --json-report-file=artifacts/pr-${PR_ID}/temp_test_results.json $(cat $FAILED_TESTS_FILE) || true
+            tox -e ${{ matrix.tox_env }} -- --tb=short --json-report --json-report-file=artifacts/pr-${PR_ID}/temp_test_results.json $(cat $FAILED_TESTS_FILE) || true
           else
             echo "No previously failed tests found."
           fi
@@ -268,7 +268,7 @@ jobs:
             echo "Running remaining test cases using tox env ${{ matrix.tox_env }}..."
             
             # Run all tests at once instead of in chunks
-            tox -e ${{ matrix.tox_env }} --installpkg=pytest-json-report -- --tb=short --json-report \
+            tox -e ${{ matrix.tox_env }} -- --tb=short --json-report \
               --json-report-file=artifacts/pr-${PR_ID}/test_results.json \
               $(cat "$REMAINING_TESTS_FILE") || true
           else
