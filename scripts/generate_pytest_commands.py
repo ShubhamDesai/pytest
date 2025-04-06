@@ -4,7 +4,7 @@ import sys
 import argparse
 from pathlib import Path
 
-def create_test_batch_json(test_list, output_dir, pr_id, batch_size=50):
+def create_test_batch_json(test_list, output_dir, pr_id, batch_size=50, prefix=''):
     """
     Create JSON files for test batches that can be used to generate pytest commands.
     
@@ -63,13 +63,15 @@ def create_test_batch_json(test_list, output_dir, pr_id, batch_size=50):
         "pr_id": pr_id,
         "batch_count": len(batches),
         "batch_files": batch_files,
-        "total_tests": len(processed_tests)
+        "total_tests": len(processed_tests),
+        "prefix": prefix
     }
     
-    with open(output_path / "manifest.json", 'w') as f:
+    manifest_file = output_path / f"{prefix}_manifest.json" if prefix else output_path / "manifest.json"
+    with open(manifest_file, 'w') as f:
         json.dump(manifest, f, indent=2)
     
-    return str(output_path / "manifest.json")
+    return str(manifest_file)
 
 def generate_bash_commands(manifest_file, tox_env):
     """
@@ -116,9 +118,22 @@ def main():
     
     args = parser.parse_args()
     
-    # Rest of your code...
+    # Read test identifiers from input file
+    with open(args.input, 'r') as f:
+        test_list = [line.strip() for line in f if line.strip()]
     
-    # Generate bash script with tox command
+    # Create JSON files
+    manifest_file = create_test_batch_json(
+        test_list, 
+        args.output_dir, 
+        args.pr_id, 
+        args.batch_size,
+        args.prefix
+    )
+    
+    print(f"Created manifest file: {manifest_file}")
+    
+    # Generate bash script if requested
     if args.generate_script:
         bash_commands = generate_bash_commands(manifest_file, args.tox_env)
         script_path = Path(args.output_dir) / f"pr-{args.pr_id}" / f"run_{args.prefix}_tests.sh"
@@ -129,6 +144,7 @@ def main():
         # Make the script executable
         os.chmod(script_path, 0o755)
         print(f"Created bash script: {script_path}")
+
 
 if __name__ == "__main__":
     main()
