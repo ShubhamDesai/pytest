@@ -136,7 +136,7 @@ def main():
     # Generate bash script if requested
     if args.generate_script:
         bash_commands = generate_bash_commands(manifest_file, args.tox_env)
-        script_path = Path(args.output_dir) / f"pr-{args.pr_id}" / f"run_{args.prefix}_tests.sh"
+        script_path = Path(args.output_dir) / f"pr-{args.pr_id}" / f"run_tests.sh"
         
         with open(script_path, 'w') as f:
             f.write(bash_commands)
