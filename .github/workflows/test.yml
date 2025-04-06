@@ -166,8 +166,8 @@ jobs:
         
             # Use tox to collect all tests
           # tox -e $#{{ matrix.tox_env }} -- --collect-only --quiet | grep "::" > $ALL_TESTS_FILE || true
-          tox -e ${{ matrix.tox_env }} -- --collect-only -v | grep -v "SKIP" | grep "::" > $ALL_TESTS_FILE || true
-        
+          tox -e ${{ matrix.tox_env }} -- --collect-only -v | grep -v "SKIP" | grep "::" | sed 's/<Function \(.*\)>/\1/' > $ALL_TESTS_FILE || true
+          
           if [[ -f "$PREV_RESULTS" ]]; then
             echo "Extracting failed test cases from previous run..."
             cat $PREV_RESULTS | jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' > $FAILED_TESTS_FILE
@@ -193,7 +193,7 @@ jobs:
           if [[ -s "$FAILED_TESTS_FILE" ]]; then
             echo "Checking for skipped tests among previously failed tests..."
             tox -e ${{ matrix.tox_env }} -- --collect-only -v $(cat $FAILED_TESTS_FILE) | grep "SKIP" | grep "::" | sed 's/.*SKIP //g' > $SKIPPED_TESTS_FILE
-      
+
             # Remove skipped tests from the failed tests list
             if [[ -s "$SKIPPED_TESTS_FILE" ]]; then
               echo "Removing skipped tests from the rerun list:"
