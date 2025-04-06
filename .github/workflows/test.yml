@@ -166,7 +166,8 @@ jobs:
         
             # Use tox to collect all tests
           # tox -e $#{{ matrix.tox_env }} -- --collect-only --quiet | grep "::" > $ALL_TESTS_FILE || true
-          tox -e ${{ matrix.tox_env }} -- --collect-only -v | grep -v "SKIP" | grep "::" | sed -E 's/.*collected (.*)$/\1/' > $ALL_TESTS_FILE || true
+          tox -e ${{ matrix.tox_env }} -- --collect-only -v | grep -v "SKIP" | sed -E 's/.*<Function (.*?)>$/\1/' > $ALL_TESTS_FILE || true
+
           if [[ -f "$PREV_RESULTS" ]]; then
             echo "Extracting failed test cases from previous run..."
             cat $PREV_RESULTS | jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' > $FAILED_TESTS_FILE
@@ -266,17 +267,13 @@ jobs:
           if [[ -s "$REMAINING_TESTS_FILE" ]]; then
             echo "Running remaining test cases using tox env ${{ matrix.tox_env }}..."
             
-            # Process the file to remove <Function ...> wrappers if they exist
-            cat "$REMAINING_TESTS_FILE" | sed 's/<Function \(.*\)>/\1/' > "artifacts/pr-${PR_ID}/clean_tests.txt"
-            
-            # Run all tests at once with clean test identifiers
+            # Run all tests at once
             tox -e ${{ matrix.tox_env }} -- --tb=short --json-report \
               --json-report-file=artifacts/pr-${PR_ID}/test_results.json \
-              -v $(cat "artifacts/pr-${PR_ID}/clean_tests.txt") || true
+              -v $(cat "$REMAINING_TESTS_FILE") || true
           else
             echo "No remaining tests to run."
           fi
-      
         
 
       - name: Upload New Test Results
