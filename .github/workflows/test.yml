@@ -166,8 +166,7 @@ jobs:
         
             # Use tox to collect all tests
           # tox -e $#{{ matrix.tox_env }} -- --collect-only --quiet | grep "::" > $ALL_TESTS_FILE || true
-          tox -e ${{ matrix.tox_env }} -- --collect-only -v | grep -v "SKIP" | grep -E "<(Function|Class|Module) " | sed -E 's/.*<(Function|Class|Module) ([^>]*)>.*/\2/' > $ALL_TESTS_FILE || true
-
+          tox -e ${{ matrix.tox_env }} -- --collect-only -v | grep -v "SKIP" | grep -E "^(.*?)::" | sed -E 's/\s+.*$//' > $ALL_TESTS_FILE || true
 
           if [[ -f "$PREV_RESULTS" ]]; then
             echo "Extracting failed test cases from previous run..."
@@ -212,7 +211,7 @@ jobs:
           FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
           
           if [[ -s "$FAILED_TESTS_FILE" ]]; then
-            python scripts/generate_pytest_commands.py --input ${FAILED_TESTS_FILE} --output-dir artifacts --pr-id ${PR_ID} --generate-script --batch-size 50 --prefix failed
+            python scripts/generate_pytest_commands.py --input artifacts/pr-${PR_ID}/remaining_tests.txt --output-dir artifacts --pr-id ${PR_ID} --generate-script --batch-size 50 --tox-env ${{ matrix.tox_env }}
           fi
             
       - name: Run Previously Failed Tests First

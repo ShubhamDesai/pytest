@@ -21,10 +21,17 @@ def create_test_batch_json(test_list, output_dir, pr_id, batch_size=50, prefix='
     # Process test identifiers to ensure they're in the correct format
     processed_tests = []
     for test in test_list:
+        # Extract only the test identifier part (remove descriptions)
+        test = test.strip()
+        # If it contains a space, take only the part before the space
+        if ' ' in test:
+            test = test.split(' ')[0]
         # Remove any <Function ...> wrapper if present
-        if test.strip().startswith("<Function ") and test.strip().endswith(">"):
-            test = test.strip()[10:-1]
-        processed_tests.append(test.strip())
+        if test.startswith("<Function ") and test.endswith(">"):
+            test = test[10:-1]
+        # Only add if it looks like a valid test identifier
+        if "::" in test or test.endswith(".py"):
+            processed_tests.append(test)
     
     # Split tests into batches
     batches = []
