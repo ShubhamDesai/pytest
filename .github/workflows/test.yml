@@ -283,14 +283,13 @@ jobs:
       - name: Display Retrieved Test Results
         shell: bash
         run: |
-          echo "======================================="
-          echo "Retrieved Test Results from PR ${PR_ID}:"
-          ls -la retrieved-results/
-          echo "Test results JSON:"
-          cat retrieved-results/test_results.json
-          echo "Shell scripts:"
-          ls -la retrieved-results/*.sh || echo "No shell scripts found"
-          echo "======================================="
+          RUN_TESTS_FILE="artifacts/pr-${PR_ID}/run_tests.sh"
+          if [[ -f "$RUN_TESTS_FILE" ]]; then
+            echo "Content of run_tests.sh:"
+            cat "$RUN_TESTS_FILE"
+          else
+            echo "run_tests.sh file does not exist."
+          fi
 
       - name: Run Remaining Test Cases
         shell: bash
