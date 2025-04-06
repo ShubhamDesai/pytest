@@ -279,18 +279,19 @@ jobs:
         shell: bash
         run: |
           python scripts/generate_pytest_commands.py --input artifacts/pr-${PR_ID}/remaining_tests.txt --output-dir artifacts --pr-id ${PR_ID} --generate-script --batch-size 50
-          - name: Display Retrieved Test Results
-          shell: bash
-          run: |
-            echo "======================================="
-            echo "Retrieved Test Results from PR ${PR_ID}:"
-            ls -la retrieved-results/
-            echo "Test results JSON:"
-            cat retrieved-results/test_results.json
-            echo "Shell scripts:"
-            ls -la retrieved-results/*.sh || echo "No shell scripts found"
-            echo "======================================="
-                  
+
+      - name: Display Retrieved Test Results
+        shell: bash
+        run: |
+          echo "======================================="
+          echo "Retrieved Test Results from PR ${PR_ID}:"
+          ls -la retrieved-results/
+          echo "Test results JSON:"
+          cat retrieved-results/test_results.json
+          echo "Shell scripts:"
+          ls -la retrieved-results/*.sh || echo "No shell scripts found"
+          echo "======================================="
+
       - name: Run Remaining Test Cases
         shell: bash
         run: |
