@@ -31,7 +31,6 @@ permissions:
 jobs:
   run-tests:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
     permissions:
       contents: read
 
