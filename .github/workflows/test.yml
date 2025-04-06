@@ -18,8 +18,8 @@ on:
 
 env:
   PYTEST_ADDOPTS: "--color=yes"
-  SETUPTOOLS_SCM_PRETEND_VERSION: "7.3.1.dev0"
-  SETUPTOOLS_SCM_NO_LOCAL_VERSION: "1"
+  # SETUPTOOLS_SCM_PRETEND_VERSION: "7.3.1.dev0"
+  # SETUPTOOLS_SCM_NO_LOCAL_VERSION: "1"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
