@@ -267,13 +267,18 @@ jobs:
           if [[ -s "$REMAINING_TESTS_FILE" ]]; then
             echo "Running remaining test cases using tox env ${{ matrix.tox_env }}..."
             
-            # Create a temporary file with test names
-            cat "$REMAINING_TESTS_FILE" > temp_tests.txt
+            # Split tests into batches of 50 tests each
+            split -l 50 "$REMAINING_TESTS_FILE" batch_
             
-            # Run tests reading from the file
-            tox -e ${{ matrix.tox_env }} -- --tb=short --json-report \
-              --json-report-file=artifacts/pr-${PR_ID}/test_results.json \
-              -v $(< temp_tests.txt) || true
+            # Run each batch
+            for batch in batch_*; do
+              echo "Running batch $batch..."
+              tox -e ${{ matrix.tox_env }} -- --tb=short --json-report \
+                --json-report-file=artifacts/pr-${PR_ID}/test_results_${batch}.json \
+                -v $(cat "$batch") || true
+            done
+            
+            # Combine results if needed
           else
             echo "No remaining tests to run."
           fi
