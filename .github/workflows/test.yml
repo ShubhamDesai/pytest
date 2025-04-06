@@ -260,28 +260,18 @@ jobs:
         shell: bash
         run: |
           REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
-        
+          
           if [[ -s "$REMAINING_TESTS_FILE" ]]; then
             echo "Running remaining test cases using tox env ${{ matrix.tox_env }}..."
-        
-            # 1. Split the test list into chunks of 300 lines each (adjust as needed).
-            CHUNK_SIZE=300
-            split -l $CHUNK_SIZE $REMAINING_TESTS_FILE chunk_
-        
-            i=1
-            for chunk in chunk_*; do
-              echo "Running chunk #$i with $(wc -l < "$chunk") tests"
-        
-              # 2. Pass those tests as arguments to tox in smaller batches
-              tox -e ${{ matrix.tox_env }} -- --tb=short --json-report \
-                --json-report-file=artifacts/pr-${PR_ID}/test_results.json \
-                $(cat "$chunk") || true
-        
-              ((i++))
-            done
+            
+            # Run all tests at once instead of in chunks
+            tox -e ${{ matrix.tox_env }} -- --tb=short --json-report \
+              --json-report-file=artifacts/pr-${PR_ID}/test_results.json \
+              $(cat "$REMAINING_TESTS_FILE") || true
           else
             echo "No remaining tests to run."
           fi
+      
         
 
       - name: Upload New Test Results
