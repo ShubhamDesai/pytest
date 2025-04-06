@@ -266,10 +266,13 @@ jobs:
           if [[ -s "$REMAINING_TESTS_FILE" ]]; then
             echo "Running remaining test cases using tox env ${{ matrix.tox_env }}..."
             
-            # Read the file and pass tests as arguments
+            # Process the file to remove <Function ...> wrappers if they exist
+            cat "$REMAINING_TESTS_FILE" | sed 's/<Function \(.*\)>/\1/' > "artifacts/pr-${PR_ID}/clean_tests.txt"
+            
+            # Run all tests at once with clean test identifiers
             tox -e ${{ matrix.tox_env }} -- --tb=short --json-report \
               --json-report-file=artifacts/pr-${PR_ID}/test_results.json \
-              -v $(cat "$REMAINING_TESTS_FILE") || true
+              -v $(cat "artifacts/pr-${PR_ID}/clean_tests.txt") || true
           else
             echo "No remaining tests to run."
           fi
