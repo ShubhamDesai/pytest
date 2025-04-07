@@ -47,7 +47,6 @@ def create_test_batch_json(test_list, output_dir, pr_id, batch_size=50, prefix='
             "batch_id": batch_id,
             "tests": batch,
             "command": {
-                "executable": "pytest",
                 "options": [
                     "--tb=short",
                     "--json-report",
