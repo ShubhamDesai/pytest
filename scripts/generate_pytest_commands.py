@@ -91,6 +91,7 @@ def generate_bash_commands(manifest_file, tox_env):
     Returns:
         A string containing bash commands
     """
+
     with open(manifest_file, 'r') as f:
         manifest = json.load(f)
     
@@ -103,11 +104,21 @@ def generate_bash_commands(manifest_file, tox_env):
     for batch_file in manifest['batch_files']:
         with open(batch_file, 'r') as f:
             batch = json.load(f)
-        tox_env_param = tox_env if tox_env else "py"
-        cmd_parts = ["tox", "-e", tox_env_param, "--", ] + batch['command']['options']
-        test_identifiers = " ".join([f"'{t}'" for t in batch['command']['test_identifiers']])
+        
+        cmd_parts = ["tox", "-e", tox_env, "--"]
+        options = " ".join(batch['command']['options'])
+        
+        # Properly escape each test identifier
+        test_lines = []
+        for test in batch['command']['test_identifiers']:
+            # Double quote each test identifier and escape any internal quotes
+            escaped_test = test.replace("'", "'\\''")
+            test_lines.append(f"  '{escaped_test}'")
+        
+
+        test_str = " \\\n".join(test_lines)        
         commands.append(f"echo 'Running batch {batch['batch_id']}...'")
-        commands.append(f"{' '.join(cmd_parts)} {test_identifiers} || true")
+        commands.append(f"{' '.join(cmd_parts)} {options} {test_str} || true")
         commands.append("")
     
     return "\n".join(commands)
