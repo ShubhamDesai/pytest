@@ -166,7 +166,7 @@ jobs:
         
             # Use tox to collect all tests
           tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep -v "SKIP" | grep "::" > $ALL_TESTS_FILE || true
-          #tox -e $#{{ matrix.tox_env }} -- --collect-only -v | grep -v "SKIP" | grep -E "^(.*?)::" | sed -E 's/\s+.*$//' > $ALL_TESTS_FILE || true
+          #tox -e ${{ matrix.tox_env }} -- --collect-only -v | grep -v "SKIP" | grep -E "^(.*?)::" | sed -E 's/\s+.*$//' > $ALL_TESTS_FILE || true
 
           if [[ -f "$PREV_RESULTS" ]]; then
             echo "Extracting failed test cases from previous run..."
@@ -278,7 +278,7 @@ jobs:
       - name: Generate Test Commands
         shell: bash
         run: |
-          python scripts/generate_pytest_commands.py --input artifacts/pr-${PR_ID}/remaining_tests.txt --output-dir artifacts --pr-id ${PR_ID} --generate-script --batch-size 50
+          python scripts/generate_pytest_commands.py --input artifacts/pr-${PR_ID}/remaining_tests.txt --output-dir artifacts --pr-id ${PR_ID} --generate-script --batch-size 50 --tox-env ${{ matrix.tox_env }}
 
       - name: Display Retrieved Test Results
         shell: bash
