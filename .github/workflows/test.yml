@@ -295,16 +295,13 @@ jobs:
         shell: bash
         run: |
           REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
+          
           if [[ -s "$REMAINING_TESTS_FILE" ]]; then
             echo "Running remaining test cases using tox env ${{ matrix.tox_env }}..."
+            
             if [[ -f "artifacts/pr-${PR_ID}/run_tests.sh" ]]; then
               chmod +x artifacts/pr-${PR_ID}/run_tests.sh
-              # Split the run_tests.sh into smaller chunks if it's too large
-              split -l 100 artifacts/pr-${PR_ID}/run_tests.sh artifacts/pr-${PR_ID}/run_tests_chunk_
-              for chunk in artifacts/pr-${PR_ID}/run_tests_chunk_*; do
-                echo "Running chunk $chunk"
-                bash "$chunk"
-              done
+              bash artifacts/pr-${PR_ID}/run_tests.sh
             else
               echo "No test script generated."
             fi
