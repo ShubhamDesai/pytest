@@ -13,22 +13,40 @@ def create_test_batch_json(test_list, output_dir, pr_id, batch_size=20, prefix='
         output_dir: Directory to save JSON files
         pr_id: PR ID for naming the artifacts
         batch_size: Number of tests per batch
+        prefix: Prefix for output files
     """
     # Create output directory if it doesn't exist
     output_path = Path(output_dir) / f"pr-{pr_id}"
     output_path.mkdir(parents=True, exist_ok=True)
     
+    # Process test identifiers to ensure they're in the correct format
+    processed_tests = []
+    for test in test_list:
+        # Extract only the test identifier part (remove descriptions)
+        test = test.strip()
+        # If it contains a space, take only the part before the space
+        if ' ' in test:
+            test = test.split(' ')[0]
+        # Remove any wrapper if present
+        if test.startswith("<Function ") and test.endswith(">"):
+            test = test[10:-1]
+        # Only add if it looks like a valid test identifier
+        if "::" in test or test.endswith(".py"):
+            processed_tests.append(test)
+    
+    # Group tests by module to reduce command line complexity
     test_modules = {}
     for test in processed_tests:
-        module = test.split("::")[0]
+        module = test.split("::")[0] if "::" in test else test
         if module not in test_modules:
             test_modules[module] = []
         test_modules[module].append(test)
     
-    # Split tests into batches
+    # Create batches based on modules to avoid command line length issues
     batches = []
     current_batch = []
     current_size = 0
+    
     for module, tests in test_modules.items():
         if current_size + len(tests) > batch_size and current_batch:
             batches.append(current_batch)
@@ -36,8 +54,36 @@ def create_test_batch_json(test_list, output_dir, pr_id, batch_size=20, prefix='
             current_size = 0
         current_batch.extend(tests)
         current_size += len(tests)
+    
     if current_batch:
         batches.append(current_batch)
+    
+    # Create JSON files for each batch
+    batch_files = []
+    for i, batch in enumerate(batches):
+        batch_id = str(i + 1)  # 1, 2, 3, 4, etc.
+        
+        batch_data = {
+            "batch_id": batch_id,
+            "tests": batch,
+            "command": {
+                "executable": "pytest",
+                "options": [
+                    "--tb=short",
+                    "--json-report",
+                    f"--json-report-file=artifacts/pr-{pr_id}/test_results_batch_{batch_id}.json",
+                    "-v"
+                ],
+                "test_identifiers": batch
+            }
+        }
+        
+        # Save to JSON file
+        batch_file = output_path / f"batch_{batch_id}.json"
+        with open(batch_file, 'w') as f:
+            json.dump(batch_data, f, indent=2)
+        
+        batch_files.append(str(batch_file))
     
     # Create a manifest file listing all batches
     manifest = {
@@ -65,7 +111,6 @@ def generate_bash_commands(manifest_file, tox_env):
     Returns:
         A string containing bash commands
     """
-
     with open(manifest_file, 'r') as f:
         manifest = json.load(f)
     
@@ -79,20 +124,24 @@ def generate_bash_commands(manifest_file, tox_env):
         with open(batch_file, 'r') as f:
             batch = json.load(f)
         
-        cmd_parts = ["tox", "-e", tox_env, "--"]
-        options = " ".join(batch['command']['options'])
+        # Create command with proper line breaks for readability
+        commands.append(f"echo 'Running batch {batch['batch_id']}...'")
+        commands.append(f"timeout 60s tox -e {tox_env} -- \\")
+        commands.append("  --tb=short \\")
+        commands.append("  --json-report \\")
+        commands.append(f"  --json-report-file=artifacts/pr-{manifest['pr_id']}/test_results_batch_{batch['batch_id']}.json \\")
+        commands.append("  -v \\")
         
-        # Properly escape each test identifier
+        # Add test identifiers with proper escaping
         test_lines = []
         for test in batch['command']['test_identifiers']:
-            # Double quote each test identifier and escape any internal quotes
+            # Escape any special characters in test names
             escaped_test = test.replace("'", "'\\''")
             test_lines.append(f"  '{escaped_test}'")
         
-
-        test_str = " \\\n".join(test_lines)        
-        commands.append(f"echo 'Running batch {batch['batch_id']}...'")
-        commands.append(f"{' '.join(cmd_parts)} {options} {test_str} || true")
+        # Join all test identifiers with line continuation
+        test_str = " \\\n".join(test_lines)
+        commands.append(test_str + " || true")
         commands.append("")
     
     return "\n".join(commands)
@@ -102,7 +151,7 @@ def main():
     parser.add_argument('--input', '-i', required=True, help='Input file with test identifiers (one per line)')
     parser.add_argument('--output-dir', '-o', default='artifacts', help='Output directory for JSON files')
     parser.add_argument('--pr-id', '-p', required=True, help='PR ID for naming artifacts')
-    parser.add_argument('--batch-size', '-b', type=int, default=50, help='Number of tests per batch')
+    parser.add_argument('--batch-size', '-b', type=int, default=20, help='Number of tests per batch')
     parser.add_argument('--generate-script', '-g', action='store_true', help='Generate bash script')
     parser.add_argument('--prefix', default='', help='Prefix for output files (e.g., "failed" for failed tests)')
     parser.add_argument('--tox-env', default='', help='Tox environment to use')
@@ -115,9 +164,9 @@ def main():
     
     # Create JSON files
     manifest_file = create_test_batch_json(
-        test_list, 
-        args.output_dir, 
-        args.pr_id, 
+        test_list,
+        args.output_dir,
+        args.pr_id,
         args.batch_size,
         args.prefix
     )
@@ -127,7 +176,7 @@ def main():
     # Generate bash script if requested
     if args.generate_script:
         bash_commands = generate_bash_commands(manifest_file, args.tox_env)
-        script_path = Path(args.output_dir) / f"pr-{args.pr_id}" / f"run_tests.sh"
+        script_path = Path(args.output_dir) / f"pr-{args.pr_id}" / f"run_{args.prefix}_tests.sh" if args.prefix else Path(args.output_dir) / f"pr-{args.pr_id}" / "run_tests.sh"
         
         with open(script_path, 'w') as f:
             f.write(bash_commands)
@@ -135,7 +184,6 @@ def main():
         # Make the script executable
         os.chmod(script_path, 0o755)
         print(f"Created bash script: {script_path}")
-
 
 if __name__ == "__main__":
     main()
