@@ -4,7 +4,7 @@ import sys
 import argparse
 from pathlib import Path
 
-def create_test_batch_json(test_list, output_dir, pr_id, batch_size=50, prefix=''):
+def create_test_batch_json(test_list, output_dir, pr_id, batch_size=20, prefix=''):
     """
     Create JSON files for test batches that can be used to generate pytest commands.
     
@@ -41,7 +41,7 @@ def create_test_batch_json(test_list, output_dir, pr_id, batch_size=50, prefix='
     # Create JSON files for each batch
     batch_files = []
     for i, batch in enumerate(batches):
-        batch_id = chr(97 + i % 26) * (1 + i // 26)  # a, b, c, ... z, aa, bb, etc.
+        batch_id = str(i + 1)  # 1, 2, 3, 4, etc.
         
         batch_data = {
             "batch_id": batch_id,
