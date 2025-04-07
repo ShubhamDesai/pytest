@@ -47,6 +47,7 @@ def create_test_batch_json(test_list, output_dir, pr_id, batch_size=50, prefix='
             "batch_id": batch_id,
             "tests": batch,
             "command": {
+                "executable": "pytest",
                 "options": [
                     "--tb=short",
                     "--json-report",
@@ -103,7 +104,7 @@ def generate_bash_commands(manifest_file, tox_env):
         with open(batch_file, 'r') as f:
             batch = json.load(f)
         tox_env_param = tox_env if tox_env else "py"
-        cmd_parts = ["tox", "-e", tox_env_param, "--", batch['command']['executable']] + batch['command']['options']
+        cmd_parts = ["tox", "-e", tox_env_param, "--", ] + batch['command']['options']
         test_identifiers = " ".join(batch['command']['test_identifiers'])
         
         commands.append(f"echo 'Running batch {batch['batch_id']}...'")
