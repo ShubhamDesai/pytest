@@ -18,52 +18,26 @@ def create_test_batch_json(test_list, output_dir, pr_id, batch_size=20, prefix='
     output_path = Path(output_dir) / f"pr-{pr_id}"
     output_path.mkdir(parents=True, exist_ok=True)
     
-    # Process test identifiers to ensure they're in the correct format
-    processed_tests = []
-    for test in test_list:
-        # Extract only the test identifier part (remove descriptions)
-        test = test.strip()
-        # If it contains a space, take only the part before the space
-        if ' ' in test:
-            test = test.split(' ')[0]
-        # Remove any <Function ...> wrapper if present
-        if test.startswith("<Function ") and test.endswith(">"):
-            test = test[10:-1]
-        # Only add if it looks like a valid test identifier
-        if "::" in test or test.endswith(".py"):
-            processed_tests.append(test)
+    test_modules = {}
+    for test in processed_tests:
+        module = test.split("::")[0]
+        if module not in test_modules:
+            test_modules[module] = []
+        test_modules[module].append(test)
     
     # Split tests into batches
     batches = []
-    for i in range(0, len(processed_tests), batch_size):
-        batches.append(processed_tests[i:i+batch_size])
-    
-    # Create JSON files for each batch
-    batch_files = []
-    for i, batch in enumerate(batches):
-        batch_id = str(i + 1)  # 1, 2, 3, 4, etc.
-        
-        batch_data = {
-            "batch_id": batch_id,
-            "tests": batch,
-            "command": {
-                "executable": "pytest",
-                "options": [
-                    "--tb=short",
-                    "--json-report",
-                    f"--json-report-file=artifacts/pr-{pr_id}/test_results_batch_{batch_id}.json",
-                    "-v"
-                ],
-                "test_identifiers": batch
-            }
-        }
-        
-        # Save to JSON file
-        batch_file = output_path / f"batch_{batch_id}.json"
-        with open(batch_file, 'w') as f:
-            json.dump(batch_data, f, indent=2)
-        
-        batch_files.append(str(batch_file))
+    current_batch = []
+    current_size = 0
+    for module, tests in test_modules.items():
+        if current_size + len(tests) > batch_size and current_batch:
+            batches.append(current_batch)
+            current_batch = []
+            current_size = 0
+        current_batch.extend(tests)
+        current_size += len(tests)
+    if current_batch:
+        batches.append(current_batch)
     
     # Create a manifest file listing all batches
     manifest = {
