@@ -105,8 +105,7 @@ def generate_bash_commands(manifest_file, tox_env):
             batch = json.load(f)
         tox_env_param = tox_env if tox_env else "py"
         cmd_parts = ["tox", "-e", tox_env_param, "--", ] + batch['command']['options']
-        test_identifiers = " ".join(batch['command']['test_identifiers'])
-        
+        test_identifiers = " ".join([f"'{t}'" for t in batch['command']['test_identifiers']])
         commands.append(f"echo 'Running batch {batch['batch_id']}...'")
         commands.append(f"{' '.join(cmd_parts)} {test_identifiers} || true")
         commands.append("")
