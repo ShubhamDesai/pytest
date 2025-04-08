@@ -1,10 +1,98 @@
 import json
 import os
 import sys
+import glob
 import argparse
 from pathlib import Path
 
-def create_test_batch_json(test_list, output_dir, pr_id, batch_size=20, prefix=''):
+def combine_test_results(pr_id, workflow_id, output_dir="artifacts"):
+    """
+    Combine all batch test results into a single JSON file.
+    
+    Args:
+        pr_id: PR ID for naming the artifacts
+        workflow_id: Unique ID for the workflow in the matrix
+        output_dir: Directory containing the artifacts
+    """
+    output_path = Path(output_dir) / f"pr-{pr_id}" / workflow_id
+    
+    # Find all batch result files
+    batch_files = list(output_path.glob("test_results_batch_*.json"))
+    
+    if not batch_files:
+        print(f"No batch result files found in {output_path}")
+        return
+    
+    # Initialize combined results
+    combined_results = {
+        "created": None,
+        "duration": 0,
+        "exitcode": 0,
+        "root": None,
+        "environment": {},
+        "summary": {
+            "passed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "xfailed": 0,
+            "xpassed": 0,
+            "error": 0,
+            "total": 0
+        },
+        "tests": [],
+        "collectors": [],
+        "warnings": []
+    }
+    
+    # Process each batch file
+    for batch_file in batch_files:
+        try:
+            with open(batch_file, 'r') as f:
+                batch_data = json.load(f)
+            
+            # Update summary
+            for key in combined_results["summary"]:
+                if key in batch_data["summary"]:
+                    combined_results["summary"][key] += batch_data["summary"][key]
+            
+            # Add tests
+            combined_results["tests"].extend(batch_data.get("tests", []))
+            
+            # Add collectors
+            combined_results["collectors"].extend(batch_data.get("collectors", []))
+            
+            # Add warnings
+            combined_results["warnings"].extend(batch_data.get("warnings", []))
+            
+            # Update duration
+            combined_results["duration"] += batch_data.get("duration", 0)
+            
+            # Update exitcode (non-zero takes precedence)
+            if batch_data.get("exitcode", 0) != 0:
+                combined_results["exitcode"] = batch_data["exitcode"]
+            
+            # Use the first batch's created timestamp and root
+            if combined_results["created"] is None and "created" in batch_data:
+                combined_results["created"] = batch_data["created"]
+            
+            if combined_results["root"] is None and "root" in batch_data:
+                combined_results["root"] = batch_data["root"]
+            
+            # Merge environment info
+            combined_results["environment"].update(batch_data.get("environment", {}))
+            
+        except Exception as e:
+            print(f"Error processing {batch_file}: {e}")
+    
+    # Save combined results
+    combined_file = output_path / "test_results.json"
+    with open(combined_file, 'w') as f:
+        json.dump(combined_results, f, indent=2)
+    
+    print(f"Combined {len(batch_files)} batch results into {combined_file}")
+
+
+def create_test_batch_json(test_list, output_dir, pr_id, workflow_id, batch_size=20, prefix=''):    
     """
     Create JSON files for test batches that can be used to generate pytest commands.
     
@@ -16,7 +104,7 @@ def create_test_batch_json(test_list, output_dir, pr_id, batch_size=20, prefix='
         prefix: Prefix for output files
     """
     # Create output directory if it doesn't exist
-    output_path = Path(output_dir) / f"pr-{pr_id}"
+    output_path = Path(output_dir) / f"pr-{pr_id}" / workflow_id
     output_path.mkdir(parents=True, exist_ok=True)
 
     # Process test identifiers to ensure they're in the correct format
@@ -52,7 +140,7 @@ def create_test_batch_json(test_list, output_dir, pr_id, batch_size=20, prefix='
                 "options": [
                     "--tb=short",
                     "--json-report",
-                    f"--json-report-file=artifacts/pr-{pr_id}/test_results_batch_{batch_id}.json",
+                    f"--json-report-file=artifacts/pr-{pr_id}/{workflow_id}/test_results_batch_{batch_id}.json",
                     "-v"
                 ],
                 "test_identifiers": batch
@@ -87,7 +175,7 @@ def generate_bash_commands(manifest_file, tox_env):
     Args:
         manifest_file: Path to the manifest JSON file
         tox_env: Tox environment to use
-    
+        
     Returns:
         A string containing bash commands
     """
@@ -124,6 +212,11 @@ def generate_bash_commands(manifest_file, tox_env):
         commands.append(test_str + " || true")
         commands.append("")
     
+    # Add command to combine all batch results into a single file
+    commands.append("# Combine all batch results into a single file")
+    commands.append(f"python {os.path.abspath(__file__)} --combine-results --output-dir=artifacts --pr-id={manifest['pr_id']}")
+    commands.append("")
+    
     return "\n".join(commands)
 
 def main():
@@ -135,8 +228,17 @@ def main():
     parser.add_argument('--generate-script', '-g', action='store_true', help='Generate bash script')
     parser.add_argument('--prefix', default='', help='Prefix for output files (e.g., "failed" for failed tests)')
     parser.add_argument('--tox-env', default='', help='Tox environment to use')
-    
+    parser.add_argument('--workflow-id', '-w', required=True, help='Unique ID for the workflow in the matrix')
+    parser.add_argument('--combine-results', action='store_true', help='Combine batch results into a single file')
+
     args = parser.parse_args()
+
+    if args.combine_results:
+        combine_test_results(args.pr_id, args.workflow_id, args.output_dir)
+        return
+    
+    if not args.input:
+        parser.error("--input is required unless --combine-results is specified")
     
     # Read test identifiers from input file
     with open(args.input, 'r') as f:
@@ -147,6 +249,7 @@ def main():
         test_list,
         args.output_dir,
         args.pr_id,
+        args.workflow_id,
         args.batch_size,
         args.prefix
     )
@@ -156,8 +259,7 @@ def main():
     # Generate bash script if requested
     if args.generate_script:
         bash_commands = generate_bash_commands(manifest_file, args.tox_env)
-        script_path = Path(args.output_dir) / f"pr-{args.pr_id}" / f"run_{args.prefix}_tests.sh" if args.prefix else Path(args.output_dir) / f"pr-{args.pr_id}" / "run_tests.sh"
-        
+        script_path = Path(args.output_dir) / f"pr-{args.pr_id}" / args.workflow_id / f"run_{args.prefix}_tests.sh" if args.prefix else Path(args.output_dir) / f"pr-{args.pr_id}" / args.workflow_id / "run_tests.sh"
         with open(script_path, 'w') as f:
             f.write(bash_commands)
         
