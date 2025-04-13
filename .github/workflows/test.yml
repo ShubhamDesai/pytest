@@ -338,7 +338,7 @@ jobs:
       - name: Download Test Results
         uses: actions/download-artifact@v4
         with:
-          name: pr-${{ env.PR_ID }}-test-results
+          name: pr-${{ env.PR_ID }}-${{ env.WORKFLOW_ID }}-test-results
           path: retrieved-results
 
       - name: Display Retrieved Test Results
