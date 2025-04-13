@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - dev
       - "[0-9]+.[0-9]+.x"
       - "test-me-*"
     tags:
@@ -13,6 +14,7 @@ on:
   pull_request:
     branches:
       - main
+      - dev
       - "[0-9]+.[0-9]+.x"
     types: [opened, synchronize, reopened, ready_for_review]
 
@@ -338,7 +340,7 @@ jobs:
       - name: Download Test Results
         uses: actions/download-artifact@v4
         with:
-          name: pr-${{ env.PR_ID }}-test-results
+          name: pr-${{ env.PR_ID }}-${{ env.WORKFLOW_ID }}-test-results
           path: retrieved-results
 
       - name: Display Retrieved Test Results
