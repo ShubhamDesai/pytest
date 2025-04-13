@@ -92,7 +92,7 @@ def combine_test_results(pr_id, workflow_id, output_dir="artifacts"):
     print(f"Combined {len(batch_files)} batch results into {combined_file}")
 
 
-def create_test_batch_json(test_list, output_dir, pr_id, workflow_id, batch_size=20, prefix=''):    
+def create_test_batch_json(test_list, output_dir, pr_id, workflow_id, batch_size=50, prefix=''):    
     """
     Create JSON files for test batches that can be used to generate pytest commands.
     
