@@ -321,8 +321,6 @@ jobs:
             artifacts/pr-${{ env.PR_ID }}/${{ env.WORKFLOW_ID }}/*.json
             artifacts/pr-${{ env.PR_ID }}/${{ env.WORKFLOW_ID }}/*.sh
         
-
-
   retrieve-results:
     needs: run-tests
     runs-on: ubuntu-latest
@@ -334,17 +332,138 @@ jobs:
       - name: Set Default Folder for Non-PR Runs
         if: github.event_name != 'pull_request'
         run: echo "PR_ID=main" >> $GITHUB_ENV
+      
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+      
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install jq
+      
+      - name: Create directory for results
+        run: mkdir -p retrieved-results
 
-      - name: Download Test Results
+      - name: Download all workflow test results
         uses: actions/download-artifact@v4
         with:
-          name: pr-${{ env.PR_ID }}-test-results
+          pattern: pr-${{ env.PR_ID }}-*-test-results
           path: retrieved-results
-
-      - name: Display Retrieved Test Results
+          merge-multiple: false
+      
+      - name: List downloaded artifacts
         shell: bash
         run: |
           echo "======================================="
-          echo "Retrieved Test Results from PR ${PR_ID}:"
-          cat retrieved-results/test_results.json
+          echo "Downloaded artifacts for PR ${PR_ID}:"
+          find retrieved-results -type f -name "test_results.json" | sort
           echo "======================================="
+      
+      - name: Combine test results
+        shell: bash
+        run: |
+          echo "Combining test results from all workflows..."
+          
+          # Initialize combined results file
+          cat > retrieved-results/combined_results.json << EOF
+          {
+            "created": "$(date -Iseconds)",
+            "duration": 0,
+            "exitcode": 0,
+            "summary": {
+              "passed": 0,
+              "failed": 0,
+              "skipped": 0,
+              "xfailed": 0,
+              "xpassed": 0,
+              "error": 0,
+              "total": 0
+            },
+            "tests": [],
+            "collectors": [],
+            "warnings": []
+          }
+          EOF
+          
+          # Find all test_results.json files
+          for result_file in $(find retrieved-results -type f -name "test_results.json"); do
+            echo "Processing $result_file"
+            
+            # Update summary counts
+            for metric in passed failed skipped xfailed xpassed error total; do
+              count=$(jq -r ".summary.$metric // 0" "$result_file")
+              current=$(jq -r ".summary.$metric" retrieved-results/combined_results.json)
+              new_count=$((current + count))
+              jq --arg metric "$metric" --argjson count "$new_count" '.summary[$metric] = $count' retrieved-results/combined_results.json > temp.json && mv temp.json retrieved-results/combined_results.json
+            done
+            
+            # Add tests
+            jq -s '.[0].tests = (.[0].tests + .[1].tests); .[0]' retrieved-results/combined_results.json "$result_file" > temp.json && mv temp.json retrieved-results/combined_results.json
+            
+            # Add duration
+            duration=$(jq -r ".duration // 0" "$result_file")
+            current_duration=$(jq -r ".duration" retrieved-results/combined_results.json)
+            new_duration=$(echo "$current_duration + $duration" | bc)
+            jq --argjson duration "$new_duration" '.duration = $duration' retrieved-results/combined_results.json > temp.json && mv temp.json retrieved-results/combined_results.json
+            
+            # Update exitcode (non-zero takes precedence)
+            exitcode=$(jq -r ".exitcode // 0" "$result_file")
+            current_exitcode=$(jq -r ".exitcode" retrieved-results/combined_results.json)
+            if [ "$exitcode" -ne 0 ] && [ "$current_exitcode" -eq 0 ]; then
+              jq --argjson exitcode "$exitcode" '.exitcode = $exitcode' retrieved-results/combined_results.json > temp.json && mv temp.json retrieved-results/combined_results.json
+            fi
+          done
+          
+          # Create a copy as test_results.json for backward compatibility
+          cp retrieved-results/combined_results.json retrieved-results/test_results.json
+      
+      - name: Display Combined Test Results
+        shell: bash
+        run: |
+          echo "======================================="
+          echo "Combined Test Results from PR ${PR_ID}:"
+          echo "Summary:"
+          jq '.summary' retrieved-results/combined_results.json
+          echo "Failed Tests:"
+          jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' retrieved-results/combined_results.json || echo "No failed tests found."
+          echo "======================================="
+      
+      - name: Upload Combined Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-${{ env.PR_ID }}-combined-test-results
+          path: retrieved-results/combined_results.json
+
+  # # retrieve-results:
+  #   needs: run-tests
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Get PR ID
+  #       if: github.event_name == 'pull_request'
+  #       run: echo "PR_ID=${{ github.event.number }}" >> $GITHUB_ENV
+
+  #     - name: Set Default Folder for Non-PR Runs
+  #       if: github.event_name != 'pull_request'
+  #       run: echo "PR_ID=main" >> $GITHUB_ENV
+
+  #     - name: Download Test Results
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: pr-${{ env.PR_ID }}-test-results
+  #         path: retrieved-results
+
+  #     - name: Display Retrieved Test Results
+  #       shell: bash
+  #       run: |
+  #         echo "======================================="
+  #         echo "Retrieved Test Results from PR ${PR_ID}:"
+  #         cat retrieved-results/test_results.json
+  #         echo "======================================="
