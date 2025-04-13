@@ -359,6 +359,18 @@ jobs:
           path: retrieved-results
           merge-multiple: false
       
+      - name: Extract zip files
+        shell: bash
+        run: |
+          echo "Extracting downloaded artifacts..."
+          for zip_file in retrieved-results/pr-${{ env.PR_ID }}-*-test-results/*.zip; do
+            if [ -f "$zip_file" ]; then
+              workflow_dir=$(dirname "$zip_file")
+              echo "Extracting $zip_file to $workflow_dir"
+              unzip -o "$zip_file" -d "$workflow_dir"
+            fi
+          done
+      
       - name: List downloaded artifacts
         shell: bash
         run: |
