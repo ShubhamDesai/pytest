@@ -168,7 +168,7 @@ def create_test_batch_json(test_list, output_dir, pr_id, workflow_id, batch_size
     
     return str(manifest_file)
 
-def generate_bash_commands(manifest_file, tox_env):
+def generate_bash_commands(manifest_file, tox_env, workflow_id):
     """
     Generate bash commands from the manifest file.
     
@@ -214,7 +214,7 @@ def generate_bash_commands(manifest_file, tox_env):
     
     # Add command to combine all batch results into a single file
     commands.append("# Combine all batch results into a single file")
-    commands.append(f"python {os.path.abspath(__file__)} --combine-results --output-dir=artifacts --pr-id={manifest['pr_id']}")
+    commands.append(f"python {os.path.abspath(__file__)} --combine-results --output-dir=artifacts --pr-id={manifest['pr_id']} --workflow-id={workflow_id}")
     commands.append("")
     
     return "\n".join(commands)
@@ -258,7 +258,7 @@ def main():
     
     # Generate bash script if requested
     if args.generate_script:
-        bash_commands = generate_bash_commands(manifest_file, args.tox_env)
+        bash_commands = generate_bash_commands(manifest_file, args.tox_env, args.workflow_id)
         script_path = Path(args.output_dir) / f"pr-{args.pr_id}" / args.workflow_id / f"run_{args.prefix}_tests.sh" if args.prefix else Path(args.output_dir) / f"pr-{args.pr_id}" / args.workflow_id / "run_tests.sh"
         with open(script_path, 'w') as f:
             f.write(bash_commands)
