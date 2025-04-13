@@ -359,11 +359,17 @@ jobs:
           path: retrieved-results
           merge-multiple: false
       
-      - name: Extract zip files
+      - name: Debug directory structure
+        shell: bash
+        run: |
+          echo "Debugging directory structure..."
+          find retrieved-results -type f | sort
+      
+      - name: Extract zip files if needed
         shell: bash
         run: |
           echo "Extracting downloaded artifacts..."
-          for zip_file in retrieved-results/pr-${{ env.PR_ID }}-*-test-results/*.zip; do
+          for zip_file in $(find retrieved-results -name "*.zip"); do
             if [ -f "$zip_file" ]; then
               workflow_dir=$(dirname "$zip_file")
               echo "Extracting $zip_file to $workflow_dir"
@@ -371,12 +377,12 @@ jobs:
             fi
           done
       
-      - name: List downloaded artifacts
+      - name: Find test result files
         shell: bash
         run: |
           echo "======================================="
           echo "Downloaded artifacts for PR ${PR_ID}:"
-          find retrieved-results -type f -name "test_results.json" | sort
+          find retrieved-results -type f -name "test_results*.json" | sort
           echo "======================================="
       
       - name: Combine test results
@@ -406,8 +412,14 @@ jobs:
           EOF
           
           # Find all test_results.json files
-          for result_file in $(find retrieved-results -type f -name "test_results.json"); do
+          for result_file in $(find retrieved-results -type f -name "test_results*.json"); do
             echo "Processing $result_file"
+            
+            # Check if file is valid JSON
+            if ! jq empty "$result_file" 2>/dev/null; then
+              echo "Warning: $result_file is not valid JSON, skipping"
+              continue
+            fi
             
             # Update summary counts
             for metric in passed failed skipped xfailed xpassed error total; do
@@ -418,7 +430,7 @@ jobs:
             done
             
             # Add tests
-            jq -s '.[0].tests = (.[0].tests + .[1].tests); .[0]' retrieved-results/combined_results.json "$result_file" > temp.json && mv temp.json retrieved-results/combined_results.json
+            jq -s '.[0].tests = (.[0].tests + (.[1].tests // [])); .[0]' retrieved-results/combined_results.json "$result_file" > temp.json && mv temp.json retrieved-results/combined_results.json
             
             # Add duration
             duration=$(jq -r ".duration // 0" "$result_file")
