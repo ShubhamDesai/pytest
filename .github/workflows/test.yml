@@ -232,7 +232,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pr-${{ env.PR_ID }}-${{ matrix.name }}-test-results
-          path: "$ARTIFACT_DIR"
+          path: ${{ env.ARTIFACT_DIR }}/**/*
 
 
 
