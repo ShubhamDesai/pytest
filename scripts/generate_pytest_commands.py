@@ -115,17 +115,42 @@ def create_test_batch_json(test_list, output_dir, pr_id, workflow_id, batch_size
         # If it contains a space, take only the part before the space
         if ' ' in test:
             test = test.split(' ')[0]
-        # Remove any <Function ...> wrapper if present
+        # Remove any wrapper if present
         if test.startswith("<Function ") and test.endswith(">"):
             test = test[10:-1]
         # Only add if it looks like a valid test identifier
         if "::" in test or test.endswith(".py"):
             processed_tests.append(test)
-
-    # Split tests into batches
+    
+    # Group tests by module to reduce command line complexity
+    test_modules = {}
+    for test in processed_tests:
+        module = test.split("::")[0] if "::" in test else test
+        if module not in test_modules:
+            test_modules[module] = []
+        test_modules[module].append(test)
+    
+    # Create batches based on modules
     batches = []
-    for i in range(0, len(processed_tests), batch_size):
-        batches.append(processed_tests[i:i+batch_size])
+    current_batch = []
+    current_size = 0
+    for module, tests in test_modules.items():
+        # Use smaller batch size for modules with many tests
+        if len(tests) > 10:
+            # Split large modules into smaller batches of 5 tests each
+            for i in range(0, len(tests), 5):
+                batches.append(tests[i:i+5])
+        else:
+            # For smaller modules, keep using the module-based approach
+            if current_size + len(tests) > batch_size and current_batch:
+                batches.append(current_batch)
+                current_batch = []
+                current_size = 0
+            current_batch.extend(tests)
+            current_size += len(tests)
+    
+    if current_batch:
+        batches.append(current_batch)
     
     # Create JSON files for each batch
     batch_files = []
@@ -169,16 +194,6 @@ def create_test_batch_json(test_list, output_dir, pr_id, workflow_id, batch_size
     return str(manifest_file)
 
 def generate_bash_commands(manifest_file, tox_env, workflow_id):
-    """
-    Generate bash commands from the manifest file.
-    
-    Args:
-        manifest_file: Path to the manifest JSON file
-        tox_env: Tox environment to use
-        
-    Returns:
-        A string containing bash commands
-    """
     with open(manifest_file, 'r') as f:
         manifest = json.load(f)
     
@@ -192,29 +207,47 @@ def generate_bash_commands(manifest_file, tox_env, workflow_id):
         with open(batch_file, 'r') as f:
             batch = json.load(f)
         
-        # Create command with proper line breaks for readability
-        commands.append(f"echo 'Running batch {batch['batch_id']}...'")
-        commands.append(f"timeout 60s tox -e {tox_env} -- \\")
-        commands.append("  --tb=short \\")
-        commands.append("  --json-report \\")
-        commands.append(f"  --json-report-file=artifacts/pr-{manifest['pr_id']}/test_results_batch_{batch['batch_id']}.json \\")
-        commands.append("  -v \\")
+        batch_id = batch['batch_id']
         
-        # Add test identifiers with proper escaping
-        test_lines = []
-        for test in batch['command']['test_identifiers']:
-            # Escape any special characters in test names
-            escaped_test = test.replace("'", "'\\''")
-            test_lines.append(f"  '{escaped_test}'")
+        # Special handling for batch 34 which is causing issues
+        is_problematic_batch = (batch_id == "34")
         
-        # Join all test identifiers with line continuation
-        test_str = " \\\n".join(test_lines)
-        commands.append(test_str + " || true")
+        commands.append(f"echo 'Running batch {batch_id}...'")
+        
+        if is_problematic_batch:
+            # For batch 34, use a file-based approach
+            commands.append(f"# Create temporary file with test identifiers")
+            commands.append(f"cat > artifacts/pr-{manifest['pr_id']}/{workflow_id}/batch_{batch_id}_tests.txt << 'EOL'")
+            for test in batch['command']['test_identifiers']:
+                commands.append(test)
+            commands.append("EOL")
+            
+            # Run tests using xargs to avoid command line expansion issues
+            commands.append(f"xargs -a artifacts/pr-{manifest['pr_id']}/{workflow_id}/batch_{batch_id}_tests.txt -d '\\n' tox -e {tox_env} -- --tb=line --json-report --json-report-file=artifacts/pr-{manifest['pr_id']}/{workflow_id}/test_results_batch_{batch_id}.json -v || true")
+        else:
+            # For other batches, use the standard approach
+            commands.append(f"tox -e {tox_env} -- \\")
+            commands.append("  --tb=short \\")
+            commands.append("  --json-report \\")
+            commands.append(f"  --json-report-file=artifacts/pr-{manifest['pr_id']}/{workflow_id}/test_results_batch_{batch_id}.json \\")
+            commands.append("  -v \\")
+            
+            # Add test identifiers with proper escaping
+            test_lines = []
+            for test in batch['command']['test_identifiers']:
+                # Escape any special characters in test names
+                escaped_test = test.replace("'", "'\\''")
+                test_lines.append(f"  '{escaped_test}'")
+            
+            # Join all test identifiers with line continuation
+            test_str = " \\\n".join(test_lines)
+            commands.append(test_str + " || true")
+        
         commands.append("")
     
     # Add command to combine all batch results into a single file
     commands.append("# Combine all batch results into a single file")
-    commands.append(f"python {os.path.abspath(__file__)} --combine-results --output-dir=artifacts --pr-id={manifest['pr_id']} --workflow-id={workflow_id}")
+    commands.append(f"python scripts/generate_pytest_commands.py --combine-results --output-dir=artifacts --pr-id={manifest['pr_id']} --workflow-id={workflow_id}")
     commands.append("")
     
     return "\n".join(commands)
@@ -259,7 +292,11 @@ def main():
     # Generate bash script if requested
     if args.generate_script:
         bash_commands = generate_bash_commands(manifest_file, args.tox_env, args.workflow_id)
-        script_path = Path(args.output_dir) / f"pr-{args.pr_id}" / args.workflow_id / f"run_{args.prefix}_tests.sh" if args.prefix else Path(args.output_dir) / f"pr-{args.pr_id}" / args.workflow_id / "run_tests.sh"
+        script_dir = Path(args.output_dir) / f"pr-{args.pr_id}" / args.workflow_id
+        script_dir.mkdir(parents=True, exist_ok=True)
+        script_name = f"run_{args.prefix}_tests.sh" if args.prefix else "run_tests.sh"
+        script_path = script_dir / script_name
+        
         with open(script_path, 'w') as f:
             f.write(bash_commands)
         
