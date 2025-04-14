@@ -236,31 +236,7 @@ jobs:
 
 
 
-  retrieve-results:
-    needs: run-tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Get PR ID
-        if: github.event_name == 'pull_request'
-        run: echo "PR_ID=${{ github.event.number }}" >> $GITHUB_ENV
-
-      - name: Set Default Folder for Non-PR Runs
-        if: github.event_name != 'pull_request'
-        run: echo "PR_ID=main" >> $GITHUB_ENV
-
-      - name: Download Test Results
-        uses: actions/download-artifact@v4
-        with:
-          name: pr-${{ env.PR_ID }}-test-results
-          path: retrieved-results
-
-      - name: Display Retrieved Test Results
-        shell: bash
-        run: |
-          echo "======================================="
-          echo "Retrieved Test Results from PR ${PR_ID}:"
-          cat retrieved-results/test_results.json
-          echo "======================================="
+  
   
   retrieve-results:
     needs: run-tests
