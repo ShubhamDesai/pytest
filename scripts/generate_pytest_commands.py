@@ -138,8 +138,8 @@ def create_test_batch_json(test_list, output_dir, pr_id, workflow_id, batch_size
         # Use smaller batch size for modules with many tests
         if len(tests) > 51:
             # Split large modules into smaller batches of 5 tests each
-            for i in range(0, len(tests), 10):
-                batches.append(tests[i:i+10])
+            for i in range(0, len(tests), 20):
+                batches.append(tests[i:i+20])
         else:
             # For smaller modules, keep using the module-based approach
             if current_size + len(tests) > batch_size and current_batch:
@@ -251,20 +251,21 @@ def generate_bash_commands(manifest_file, tox_env, workflow_id):
     commands.append("")
     
     return "\n".join(commands)
+
 def main():
     parser = argparse.ArgumentParser(description='Generate JSON files for pytest commands')
-    parser.add_argument('--input', '-i', required=True, help='Input file with test identifiers (one per line)')
+    parser.add_argument('--input', '-i', help='Input file with test identifiers (one per line)')
     parser.add_argument('--output-dir', '-o', default='artifacts', help='Output directory for JSON files')
     parser.add_argument('--pr-id', '-p', required=True, help='PR ID for naming artifacts')
-    parser.add_argument('--batch-size', '-b', type=int, default=20, help='Number of tests per batch')
+    parser.add_argument('--workflow-id', '-w', required=True, help='Unique ID for the workflow in the matrix')
+    parser.add_argument('--batch-size', '-b', type=int, default=50, help='Number of tests per batch')
     parser.add_argument('--generate-script', '-g', action='store_true', help='Generate bash script')
     parser.add_argument('--prefix', default='', help='Prefix for output files (e.g., "failed" for failed tests)')
     parser.add_argument('--tox-env', default='', help='Tox environment to use')
-    parser.add_argument('--workflow-id', '-w', required=True, help='Unique ID for the workflow in the matrix')
     parser.add_argument('--combine-results', action='store_true', help='Combine batch results into a single file')
-
+    
     args = parser.parse_args()
-
+    
     if args.combine_results:
         combine_test_results(args.pr_id, args.workflow_id, args.output_dir)
         return
@@ -291,10 +292,7 @@ def main():
     # Generate bash script if requested
     if args.generate_script:
         bash_commands = generate_bash_commands(manifest_file, args.tox_env, args.workflow_id)
-        script_dir = Path(args.output_dir) / f"pr-{args.pr_id}" / args.workflow_id
-        script_dir.mkdir(parents=True, exist_ok=True)
-        script_name = f"run_{args.prefix}_tests.sh" if args.prefix else "run_tests.sh"
-        script_path = script_dir / script_name
+        script_path = Path(args.output_dir) / f"pr-{args.pr_id}" / args.workflow_id / f"run_{args.prefix}_tests.sh" if args.prefix else Path(args.output_dir) / f"pr-{args.pr_id}" / args.workflow_id / "run_tests.sh"
         
         with open(script_path, 'w') as f:
             f.write(bash_commands)
