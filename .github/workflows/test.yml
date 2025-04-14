@@ -153,7 +153,7 @@ jobs:
           REMAINING_TESTS_FILE="$ARTIFACT_DIR/remaining_tests.txt"
           
           # Use tox to collect all tests
-          tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep "::" > "$ALL_TESTS_FILE" || true
+          tox -e ${{ matrix.tox_env }} -- --collect-only --verbose | grep "::" | grep -v "\[SKIPPED\]" > "$ALL_TESTS_FILE" || true
 
           if [[ -f "$PREV_RESULTS" ]]; then
             echo "Extracting failed tests from previous run..."
