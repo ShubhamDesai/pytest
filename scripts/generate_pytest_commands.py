@@ -121,7 +121,6 @@ def create_test_batch_json(test_list, output_dir, pr_id, workflow_id, batch_size
         # Only add if it looks like a valid test identifier
         if "::" in test or test.endswith(".py"):
             processed_tests.append(test)
-    
     # Group tests by module to reduce command line complexity
     test_modules = {}
     for test in processed_tests:
@@ -129,7 +128,6 @@ def create_test_batch_json(test_list, output_dir, pr_id, workflow_id, batch_size
         if module not in test_modules:
             test_modules[module] = []
         test_modules[module].append(test)
-    
     # Create batches based on modules
     batches = []
     current_batch = []
@@ -155,8 +153,7 @@ def create_test_batch_json(test_list, output_dir, pr_id, workflow_id, batch_size
     # Create JSON files for each batch
     batch_files = []
     for i, batch in enumerate(batches):
-        batch_id = str(i + 1)  # 1, 2, 3, 4, etc.
-        
+        batch_id = str(i + 1)
         batch_data = {
             "batch_id": batch_id,
             "tests": batch,
@@ -171,8 +168,6 @@ def create_test_batch_json(test_list, output_dir, pr_id, workflow_id, batch_size
                 "test_identifiers": batch
             }
         }
-        
-        # Save to JSON file
         batch_file = output_path / f"batch_{batch_id}.json"
         with open(batch_file, 'w') as f:
             json.dump(batch_data, f, indent=2)
