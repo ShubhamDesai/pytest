@@ -136,7 +136,7 @@ def create_test_batch_json(test_list, output_dir, pr_id, workflow_id, batch_size
     current_size = 0
     for module, tests in test_modules.items():
         # Use smaller batch size for modules with many tests
-        if len(tests) > 52:
+        if len(tests) > 51:
             # Split large modules into smaller batches of 5 tests each
             for i in range(0, len(tests), 10):
                 batches.append(tests[i:i+10])
@@ -209,23 +209,23 @@ def generate_bash_commands(manifest_file, tox_env, workflow_id):
         
         batch_id = batch['batch_id']
         
-        # Special handling for batch 34 which is causing issues
-        is_problematic_batch = (batch_id == "34")
+        # Check if this batch contains problematic tests
+        has_problematic_tests = any("test_reporting.py" in test for test in batch['command']['test_identifiers'])
         
         commands.append(f"echo 'Running batch {batch_id}...'")
         
-        if is_problematic_batch:
-            # For batch 34, use a file-based approach
+        if has_problematic_tests:
+            # For problematic tests, use a file-based approach
             commands.append(f"# Create temporary file with test identifiers")
             commands.append(f"cat > artifacts/pr-{manifest['pr_id']}/{workflow_id}/batch_{batch_id}_tests.txt << 'EOL'")
             for test in batch['command']['test_identifiers']:
                 commands.append(test)
             commands.append("EOL")
             
-            # Run tests using xargs to avoid command line expansion issues
-            commands.append(f"xargs -a artifacts/pr-{manifest['pr_id']}/{workflow_id}/batch_{batch_id}_tests.txt -d '\\n' tox -e {tox_env} -- --tb=line --json-report --json-report-file=artifacts/pr-{manifest['pr_id']}/{workflow_id}/test_results_batch_{batch_id}.json -v || true")
+            # Run tests using a file-based approach to avoid command line expansion issues
+            commands.append(f"tox -e {tox_env} -- --tb=short --json-report --json-report-file=artifacts/pr-{manifest['pr_id']}/{workflow_id}/test_results_batch_{batch_id}.json -v @artifacts/pr-{manifest['pr_id']}/{workflow_id}/batch_{batch_id}_tests.txt || true")
         else:
-            # For other batches, use the standard approach
+            # For normal tests, use the standard approach
             commands.append(f"tox -e {tox_env} -- \\")
             commands.append("  --tb=short \\")
             commands.append("  --json-report \\")
@@ -251,7 +251,6 @@ def generate_bash_commands(manifest_file, tox_env, workflow_id):
     commands.append("")
     
     return "\n".join(commands)
-
 def main():
     parser = argparse.ArgumentParser(description='Generate JSON files for pytest commands')
     parser.add_argument('--input', '-i', required=True, help='Input file with test identifiers (one per line)')
