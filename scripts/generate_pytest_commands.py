@@ -136,7 +136,7 @@ def create_test_batch_json(test_list, output_dir, pr_id, workflow_id, batch_size
     current_size = 0
     for module, tests in test_modules.items():
         # Use smaller batch size for modules with many tests
-        if len(tests) > 10:
+        if len(tests) > 50:
             # Split large modules into smaller batches of 5 tests each
             for i in range(0, len(tests), 5):
                 batches.append(tests[i:i+5])
