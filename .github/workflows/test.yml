@@ -315,19 +315,7 @@ jobs:
           else
             echo "No remaining tests to run."
           fi
-      
-      - name: Run Problematic Tests with Debugger
-        shell: bash
-        run: |
-          # Extract tests from batch 34
-          mkdir -p debug
-          jq -r '.command.test_identifiers[]' "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/batch_34.json" > debug/batch_34_tests.txt
-          
-          # Run first test with debugger
-          FIRST_TEST=$(head -1 debug/batch_34_tests.txt)
-          echo "Running first test with debugger: $FIRST_TEST"
-          tox -e ${TOX_ENV} -- --tb=native -v --pdb $FIRST_TEST
-        
+              
       - name: Upload New Test Results
         uses: actions/upload-artifact@v4
         with:
