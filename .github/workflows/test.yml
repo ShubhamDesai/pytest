@@ -219,23 +219,19 @@ jobs:
           path: retrieved-results
           merge-multiple: false
 
-      - name: Merge all test results
+      - name: Display per-workflow summaries
         run: |
-          echo "{}" > retrieved-results/final_merged.json
-          for file in $(find retrieved-results -name test_results.json); do
-            echo "Processing $file"
-            jq '.' "$file" > temp.json
-            jq -s '.[0] * {tests: ([.[] | .tests] | add)}' retrieved-results/final_merged.json temp.json > merged.json
-            mv merged.json retrieved-results/final_merged.json
-            rm temp.json
+          echo "================ Per-Workflow Results ================"
+          for result_file in $(find retrieved-results -name test_results.json); do
+            echo "--- Summary for ${result_file} ---"
+            jq '.summary' "$result_file" || echo "No summary found"
+            echo "Failed Tests:"
+            jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' "$result_file" || echo "No failed tests"
+            echo "====================================================="
           done
 
-      - name: Display merged summary
-        run: |
-          jq '.summary' retrieved-results/final_merged.json || echo "No summary"
-
-      - name: Upload final merged results
+      - name: Upload Combined Results
         uses: actions/upload-artifact@v4
         with:
           name: pr-${{ env.PR_ID }}-combined-test-results
-          path: retrieved-results/final_merged.json
+          path: retrieved-results
