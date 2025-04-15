@@ -15,6 +15,7 @@ on:
       - main
       - "[0-9]+.[0-9]+.x"
     types: [opened, synchronize, reopened, ready_for_review]
+    
 
 env:
   PYTEST_ADDOPTS: "--color=yes"
