@@ -315,7 +315,27 @@ jobs:
           else
             echo "No remaining tests to run."
           fi
-              
+
+      - name: Save Test Outcome Lists
+        shell: bash
+        run: |
+          RESULTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/test_results.json"
+          OUT_DIR="artifacts/pr-${PR_ID}/${WORKFLOW_ID}"
+
+          if [[ -f "$RESULTS_FILE" ]]; then
+            echo "Saving categorized test outcome lists for ${WORKFLOW_ID}..."
+
+            for outcome in failed passed skipped xfailed xpassed error; do
+              jq -r --arg outcome "$outcome" '.tests | map(select(.outcome == $outcome)) | .[].nodeid' "$RESULTS_FILE" > "$OUT_DIR/${outcome}_tests.txt"
+              echo "$outcome tests written to $OUT_DIR/${outcome}_tests.txt"
+            done
+          else
+            echo "No results file found at $RESULTS_FILE"
+          fi
+
+      
+          
+          
       - name: Upload New Test Results
         uses: actions/upload-artifact@v4
         with:
@@ -471,6 +491,8 @@ jobs:
         with:
           name: pr-${{ env.PR_ID }}-combined-test-results
           path: retrieved-results/combined_results.json
+
+      
 
     
 
