@@ -15,7 +15,6 @@ on:
       - main
       - "[0-9]+.[0-9]+.x"
     types: [opened, synchronize, reopened, ready_for_review]
-    
 
 env:
   PYTEST_ADDOPTS: "--color=yes"
@@ -106,20 +105,33 @@ jobs:
         if: github.event_name != 'pull_request'
         run: echo "PR_ID=main" >> $GITHUB_ENV
 
-      - name: Run Full Tests on First PR
+      - name: Check if Artifact Exists for Workflow
+        run: |
+          ARTIFACTS_RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts")
+
+          ARTIFACT_COUNT=$(echo "$ARTIFACTS_RESPONSE" | jq -r --arg ART "pr-${{ env.PR_ID }}-${{ matrix.name }}-test-results" '[.artifacts[] | select(.name==$ART)] | length')
+
+          if [[ "$ARTIFACT_COUNT" -gt 0 ]]; then
+            echo "PREV_ARTIFACT_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "PREV_ARTIFACT_EXISTS=false" >> $GITHUB_ENV
+          fi
+
+      - name: Run full test suite if no artifact exists
         if: env.PREV_ARTIFACT_EXISTS != 'true'
         run: |
           mkdir -p artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}
           tox -e ${{ matrix.tox_env }} -- --json-report --json-report-file=artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}/test_results.json
 
-      - name: Retrieve Previous Artifacts (if exist)
+      - name: Download and extract previous artifact if exists
         if: env.PREV_ARTIFACT_EXISTS == 'true'
         run: |
           ARTIFACT_URL=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${{ github.repository }}/actions/artifacts" | \
-            jq -r --arg ART "pr-${{ env.PR_ID }}-${{ matrix.name }}-test-results" \
-              '[.artifacts[] | select(.name==$ART)] | sort_by(.created_at) | reverse | .[0].archive_download_url')
+            jq -r --arg ART "pr-${{ env.PR_ID }}-${{ matrix.name }}-test-results" '[.artifacts[] | select(.name==$ART)] | sort_by(.created_at) | reverse | .[0].archive_download_url')
 
           if [[ -n "$ARTIFACT_URL" && "$ARTIFACT_URL" != "null" ]]; then
             mkdir -p artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}
@@ -128,12 +140,12 @@ jobs:
             unzip -o artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}/test-results.zip -d artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}
           fi
 
-      - name: Identify Remaining + Failed Tests
+      - name: Collect all test cases and split failed vs remaining
         run: |
-          PREV_RESULTS="artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}/test_results.json"
-          FAILED="artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}/failed_tests.txt"
-          ALL="artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}/all_tests.txt"
-          REMAIN="artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}/remaining_tests.txt"
+          PREV_RESULTS=artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}/test_results.json
+          FAILED=artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}/failed_tests.txt
+          ALL=artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}/all_tests.txt
+          REMAIN=artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}/remaining_tests.txt
 
           tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep '::' > "$ALL" || true
 
@@ -144,7 +156,7 @@ jobs:
             cp "$ALL" "$REMAIN"
           fi
 
-      - name: Run Only Failed Tests First
+      - name: Run failed tests (if any)
         run: |
           FAILED_FILE=artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}/failed_tests.txt
           if [[ -s "$FAILED_FILE" ]]; then
@@ -158,7 +170,7 @@ jobs:
             bash artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}/run_failed_tests.sh || exit 1
           fi
 
-      - name: Run Remaining Tests if all failed ones pass
+      - name: Run remaining tests (if needed)
         run: |
           REMAIN_FILE=artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}/remaining_tests.txt
           if [[ -s "$REMAIN_FILE" ]]; then
@@ -172,7 +184,7 @@ jobs:
             bash artifacts/pr-${{ env.PR_ID }}/${{ matrix.name }}/run_tests.sh
           fi
 
-      - name: Upload Results
+      - name: Upload per-workflow test results
         uses: actions/upload-artifact@v4
         with:
           name: pr-${{ env.PR_ID }}-${{ matrix.name }}-test-results
@@ -200,48 +212,30 @@ jobs:
       - name: Install dependencies
         run: pip install jq
 
-      - name: Create directory for results
-        run: mkdir -p retrieved-results
-
-      - name: Download artifacts
+      - name: Download all workflow results
         uses: actions/download-artifact@v4
         with:
           pattern: pr-${{ env.PR_ID }}-*-test-results
           path: retrieved-results
           merge-multiple: false
 
-      - name: Combine per-workflow results
+      - name: Merge all test results
         run: |
-          echo "[]" > retrieved-results/combined_by_workflow.json
-
-          for result in $(find retrieved-results -type f -name test_results.json); do
-            WORKFLOW=$(basename $(dirname "$result"))
-            SUMMARY=$(jq '.summary' "$result")
-            TESTS=$(jq '.tests' "$result")
-            DURATION=$(jq '.duration // 0' "$result")
-
-            jq -n --arg workflow "$WORKFLOW" --argjson summary "$SUMMARY" --argjson duration "$DURATION" --argjson tests "$TESTS" \
-              '{workflow: $workflow, summary: $summary, duration: $duration, tests: $tests}' > temp.json
-
-            jq -s '.[0] + [.[1]]' retrieved-results/combined_by_workflow.json temp.json > combined.json
-            mv combined.json retrieved-results/combined_by_workflow.json
+          echo "{}" > retrieved-results/final_merged.json
+          for file in $(find retrieved-results -name test_results.json); do
+            echo "Processing $file"
+            jq '.' "$file" > temp.json
+            jq -s '.[0] * {tests: ([.[] | .tests] | add)}' retrieved-results/final_merged.json temp.json > merged.json
+            mv merged.json retrieved-results/final_merged.json
             rm temp.json
           done
 
-          cat > retrieved-results/final_combined.json <<EOF
-{
-  "created": "$(date -Iseconds)",
-  "results": $(cat retrieved-results/combined_by_workflow.json)
-}
-EOF
-
-      - name: Display Combined Test Results
+      - name: Display merged summary
         run: |
-          jq '.results[].summary' retrieved-results/final_combined.json
-          jq -r '.results[].tests | map(select(.outcome == "failed")) | .[].nodeid' retrieved-results/final_combined.json || echo "No failed tests found."
+          jq '.summary' retrieved-results/final_merged.json || echo "No summary"
 
-      - name: Upload Combined Results
+      - name: Upload final merged results
         uses: actions/upload-artifact@v4
         with:
           name: pr-${{ env.PR_ID }}-combined-test-results
-          path: retrieved-results/final_combined.json
+          path: retrieved-results/final_merged.json
