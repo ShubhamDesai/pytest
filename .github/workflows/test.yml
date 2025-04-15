@@ -315,7 +315,27 @@ jobs:
           else
             echo "No remaining tests to run."
           fi
-              
+
+      - name: Save Test Outcome Lists
+        shell: bash
+        run: |
+          RESULTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/test_results.json"
+          OUT_DIR="artifacts/pr-${PR_ID}/${WORKFLOW_ID}"
+
+          if [[ -f "$RESULTS_FILE" ]]; then
+            echo "Saving categorized test outcome lists for ${WORKFLOW_ID}..."
+
+            for outcome in failed passed skipped xfailed xpassed error; do
+              jq -r --arg outcome "$outcome" '.tests | map(select(.outcome == $outcome)) | .[].nodeid' "$RESULTS_FILE" > "$OUT_DIR/${outcome}_tests.txt"
+              echo "$outcome tests written to $OUT_DIR/${outcome}_tests.txt"
+            done
+          else
+            echo "No results file found at $RESULTS_FILE"
+          fi
+
+      
+          
+          
       - name: Upload New Test Results
         uses: actions/upload-artifact@v4
         with:
@@ -391,9 +411,18 @@ jobs:
       - name: Combine test results
         shell: bash
         run: |
+          echo "Displaying results per workflow..."
+          for result_file in $(find retrieved-results -type f -name "test_results*.json"); do
+            echo "---------------------------------------"
+            echo "Workflow: $(basename $(dirname "$result_file"))"
+            echo "Summary:"
+            jq '.summary' "$result_file"
+            echo "Failed Tests:"
+            jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' "$result_file" || echo "No failed tests"
+            echo "---------------------------------------"
+          done
+
           echo "Combining test results from all workflows..."
-          
-          # Initialize combined results file
           cat > retrieved-results/combined_results.json << EOF
           {
             "created": "$(date -Iseconds)",
@@ -413,44 +442,38 @@ jobs:
             "warnings": []
           }
           EOF
-          
-          # Find all test_results.json files
+
           for result_file in $(find retrieved-results -type f -name "test_results*.json"); do
             echo "Processing $result_file"
-            
-            # Check if file is valid JSON
+
             if ! jq empty "$result_file" 2>/dev/null; then
               echo "Warning: $result_file is not valid JSON, skipping"
               continue
             fi
-            
-            # Update summary counts
+
             for metric in passed failed skipped xfailed xpassed error total; do
               count=$(jq -r ".summary.$metric // 0" "$result_file")
               current=$(jq -r ".summary.$metric" retrieved-results/combined_results.json)
               new_count=$((current + count))
               jq --arg metric "$metric" --argjson count "$new_count" '.summary[$metric] = $count' retrieved-results/combined_results.json > temp.json && mv temp.json retrieved-results/combined_results.json
             done
-            
-            # Add tests
+
             jq -s '.[0].tests = (.[0].tests + (.[1].tests // [])); .[0]' retrieved-results/combined_results.json "$result_file" > temp.json && mv temp.json retrieved-results/combined_results.json
-            
-            # Add duration
+
             duration=$(jq -r ".duration // 0" "$result_file")
             current_duration=$(jq -r ".duration" retrieved-results/combined_results.json)
             new_duration=$(echo "$current_duration + $duration" | bc)
             jq --argjson duration "$new_duration" '.duration = $duration' retrieved-results/combined_results.json > temp.json && mv temp.json retrieved-results/combined_results.json
-            
-            # Update exitcode (non-zero takes precedence)
+
             exitcode=$(jq -r ".exitcode // 0" "$result_file")
             current_exitcode=$(jq -r ".exitcode" retrieved-results/combined_results.json)
             if [ "$exitcode" -ne 0 ] && [ "$current_exitcode" -eq 0 ]; then
               jq --argjson exitcode "$exitcode" '.exitcode = $exitcode' retrieved-results/combined_results.json > temp.json && mv temp.json retrieved-results/combined_results.json
             fi
           done
-          
-          # Create a copy as test_results.json for backward compatibility
+
           cp retrieved-results/combined_results.json retrieved-results/test_results.json
+
       
       - name: Display Combined Test Results
         shell: bash
@@ -468,6 +491,10 @@ jobs:
         with:
           name: pr-${{ env.PR_ID }}-combined-test-results
           path: retrieved-results/combined_results.json
+
+      
+
+    
 
   # # retrieve-results:
   #   needs: run-tests
