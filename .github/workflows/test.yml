@@ -185,30 +185,33 @@ jobs:
       - name: Extract Failed and Passed Tests from Previous Run
         shell: bash
         run: |
-          mkdir -p artifacts/pr-${PR_ID}
-          PREV_RESULTS="artifacts/pr-${PR_ID}/test_results.json"
-          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
-          ALL_TESTS_FILE="artifacts/pr-${PR_ID}/all_tests.txt"
-          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
-        
-            # Use tox to collect all tests
-          tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep -v "SKIP" | grep "::" > $ALL_TESTS_FILE || true
-          #tox -e ${{ matrix.tox_env }} -- --collect-only -v | grep -v "SKIP" | grep -E "^(.*?)::" | sed -E 's/\s+.*$//' > $ALL_TESTS_FILE || true
-
-          if [[ -f "$PREV_RESULTS" ]]; then
-            echo "Extracting failed test cases from previous run..."
-            cat $PREV_RESULTS | jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' > $FAILED_TESTS_FILE
-          else
-            echo "No previous test results found. Skipping extraction."
-            touch $FAILED_TESTS_FILE
-          fi
-        
-          if [[ -s "$FAILED_TESTS_FILE" ]]; then
-            echo "Failed tests from the previous run:"
-            cat $FAILED_TESTS_FILE
-          else
-            echo "No previously failed tests found."
-          fi
+                mkdir -p artifacts/pr-${PR_ID}
+                FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
+                ALL_TESTS_FILE="artifacts/pr-${PR_ID}/all_tests.txt"
+                REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
+            
+                # Collect all tests in the current matrix environment
+                tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep -v "SKIP" | grep "::" > $ALL_TESTS_FILE || true
+            
+                # Combine failed tests from all available previous workflow test_results.json
+                > $FAILED_TESTS_FILE
+                for result_file in artifacts/pr-${PR_ID}/*/test_results.json; do
+                  if [[ -f "$result_file" ]]; then
+                    echo "Processing failed tests from $result_file"
+                    jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' "$result_file" >> "$FAILED_TESTS_FILE"
+                  fi
+                done
+            
+                # Remove duplicate entries
+                sort -u "$FAILED_TESTS_FILE" -o "$FAILED_TESTS_FILE"
+            
+                if [[ -s "$FAILED_TESTS_FILE" ]]; then
+                  echo "Failed tests from the previous run:"
+                  cat "$FAILED_TESTS_FILE"
+                else
+                  echo "No previously failed tests found."
+                fi
+            
      
       - name: Pre-Check for Previously Failed Tests
         shell: bash
