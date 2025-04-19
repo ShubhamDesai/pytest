@@ -128,32 +128,41 @@ jobs:
             echo "PREV_ARTIFACT_EXISTS=false" >> $GITHUB_ENV
           fi
 
+
       - name: Retrieve Previous Artifacts (If Exists)
         if: env.PREV_ARTIFACT_EXISTS == 'true'
         shell: bash
         run: |
           echo "Fetching previous test results for PR ${PR_ID}..."
-
-          ARTIFACT_URL=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+        
+          ARTIFACTS_RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts" | \
-            jq -r --arg PR "pr-${PR_ID}-test-results" \
-            '[.artifacts[] | select(.name==$PR)] | sort_by(.created_at) | reverse | .[0].archive_download_url')
-
-          if [[ -n "$ARTIFACT_URL" && "$ARTIFACT_URL" != "null" ]]; then
-            echo "Latest artifact found. Downloading..."
-            mkdir -p artifacts/pr-${PR_ID}
-            curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                 -o artifacts/pr-${PR_ID}/test-results.zip "$ARTIFACT_URL"
-            unzip -o artifacts/pr-${PR_ID}/test-results.zip -d artifacts/pr-${PR_ID}
-
-            echo "======================================="
-            echo "Previous Test Results for PR-${PR_ID}:"
-            cat artifacts/pr-${PR_ID}/test_results.json || echo "No previous test results found."
-            echo "======================================="
+            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts")
+        
+          MATCHED=$(echo "$ARTIFACTS_RESPONSE" | jq -r --arg PR "pr-${PR_ID}-" \
+            '[.artifacts[] | select(.name | startswith($PR))]')
+        
+          COUNT=$(echo "$MATCHED" | jq 'length')
+        
+          if [[ "$COUNT" -gt 0 ]]; then
+            echo "$MATCHED" | jq -r '.[] | "\(.name)|\(.archive_download_url)"' | while IFS="|" read -r ARTIFACT_NAME ARTIFACT_URL; do
+              echo "Processing artifact: $ARTIFACT_NAME"
+              TARGET_DIR="artifacts/pr-${PR_ID}/$ARTIFACT_NAME"
+              mkdir -p "$TARGET_DIR"
+        
+              curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -o "$TARGET_DIR/test-results.zip" "$ARTIFACT_URL"
+        
+              unzip -o "$TARGET_DIR/test-results.zip" -d "$TARGET_DIR"
+        
+              echo "Extracted contents of $ARTIFACT_NAME:"
+              find "$TARGET_DIR" -type f
+            done
           else
-            echo "No previous test results found for PR-${PR_ID}. Running fresh tests."
+            echo "No previous artifacts found for PR-${PR_ID}. Running fresh tests."
           fi
+        
+        
 
       - name: Extract Failed and Passed Tests from Previous Run
         shell: bash
