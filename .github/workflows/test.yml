@@ -141,36 +141,40 @@ jobs:
         if: env.PREV_ARTIFACT_EXISTS == 'true'
         shell: bash
         run: |
-          echo "Fetching previous test results for PR ${PR_ID}..."
-        
-          ARTIFACTS_RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts")
-        
-          MATCHED=$(echo "$ARTIFACTS_RESPONSE" | jq -r --arg PR "pr-${PR_ID}-" \
-            '[.artifacts[] | select(.name | startswith($PR))]')
-        
-          COUNT=$(echo "$MATCHED" | jq 'length')
-        
-          if [[ "$COUNT" -gt 0 ]]; then
-            echo "$MATCHED" | jq -r '.[] | select(.archive_download_url != null) | "\(.name)|\(.archive_download_url)"' | while IFS="|" read -r ARTIFACT_NAME ARTIFACT_URL; do
-              echo "Processing artifact: $ARTIFACT_NAME"
-              TARGET_DIR="artifacts/pr-${PR_ID}/$ARTIFACT_NAME"
-              mkdir -p "$TARGET_DIR"
-        
-              if [[ -n "$ARTIFACT_URL" && "$ARTIFACT_URL" == https://* ]]; then
-                curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                  -o "$TARGET_DIR/test-results.zip" "$ARTIFACT_URL"
-                unzip -o "$TARGET_DIR/test-results.zip" -d "$TARGET_DIR"
-                echo "Extracted contents of $ARTIFACT_NAME:"
-                find "$TARGET_DIR" -type f
-              else
-                echo "Skipping $ARTIFACT_NAME: Invalid or missing URL"
+              echo "Fetching previous test results for PR ${PR_ID}..."
+          
+              ARTIFACTS_RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/artifacts")
+          
+              echo "$ARTIFACTS_RESPONSE" | jq -r --arg PR "pr-${PR_ID}-" \
+                '[.artifacts[] | select(.name | startswith($PR)) | {name, url: .archive_download_url}]' > filtered.json
+          
+              COUNT=$(jq 'length' filtered.json)
+          
+              if [[ "$COUNT" -eq 0 ]]; then
+                echo "No previous artifacts found for PR-${PR_ID}. Running fresh tests."
+                exit 0
               fi
-            done
-          else
-            echo "No previous artifacts found for PR-${PR_ID}. Running fresh tests."
-          fi
+          
+              for i in $(seq 0 $((COUNT - 1))); do
+                NAME=$(jq -r ".[$i].name" filtered.json)
+                URL=$(jq -r ".[$i].url" filtered.json)
+          
+                echo "Processing artifact: $NAME"
+                TARGET_DIR="artifacts/pr-${PR_ID}/$NAME"
+                mkdir -p "$TARGET_DIR"
+          
+                if [[ "$URL" == https://* ]]; then
+                  curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o "$TARGET_DIR/test-results.zip" "$URL"
+                  unzip -o "$TARGET_DIR/test-results.zip" -d "$TARGET_DIR"
+                  echo "Extracted contents of $NAME:"
+                  find "$TARGET_DIR" -type f
+                else
+                  echo "Skipping $NAME: Invalid URL"
+                fi
+              done
+          
         
         
         
