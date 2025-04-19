@@ -145,7 +145,7 @@ jobs:
           COUNT=$(echo "$MATCHED" | jq 'length')
         
           if [[ "$COUNT" -gt 0 ]]; then
-            echo "$MATCHED" | jq -r '.[] | "\(.name)|\(.archive_download_url)"' | while IFS="|" read -r ARTIFACT_NAME ARTIFACT_URL; do
+            echo "$MATCHED" | jq -r '.[] | select(.archive_download_url != null) | "\(.name)|\(.archive_download_url)"' | while IFS="|" read -r ARTIFACT_NAME ARTIFACT_URL; do
               echo "Processing artifact: $ARTIFACT_NAME"
               TARGET_DIR="artifacts/pr-${PR_ID}/$ARTIFACT_NAME"
               mkdir -p "$TARGET_DIR"
