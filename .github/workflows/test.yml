@@ -119,8 +119,8 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${{ github.repository }}/actions/artifacts")
 
-          ARTIFACT_COUNT=$(echo "$ARTIFACTS_RESPONSE" | jq -r --arg PR "pr-${PR_ID}-test-results" \
-            '[.artifacts[] | select(.name==$PR)] | length')
+          ARTIFACT_COUNT=$(echo "$ARTIFACTS_RESPONSE" | jq -r --arg PR "pr-${PR_ID}-" \
+            '[.artifacts[] | select(.name | startswith($PR))] | length')
 
           if [[ "$ARTIFACT_COUNT" -gt 0 ]]; then
             echo "PREV_ARTIFACT_EXISTS=true" >> $GITHUB_ENV
