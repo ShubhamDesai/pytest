@@ -150,17 +150,20 @@ jobs:
               TARGET_DIR="artifacts/pr-${PR_ID}/$ARTIFACT_NAME"
               mkdir -p "$TARGET_DIR"
         
-              curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -o "$TARGET_DIR/test-results.zip" "$ARTIFACT_URL"
-        
-              unzip -o "$TARGET_DIR/test-results.zip" -d "$TARGET_DIR"
-        
-              echo "Extracted contents of $ARTIFACT_NAME:"
-              find "$TARGET_DIR" -type f
+              if [[ -n "$ARTIFACT_URL" && "$ARTIFACT_URL" == https://* ]]; then
+                curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                  -o "$TARGET_DIR/test-results.zip" "$ARTIFACT_URL"
+                unzip -o "$TARGET_DIR/test-results.zip" -d "$TARGET_DIR"
+                echo "Extracted contents of $ARTIFACT_NAME:"
+                find "$TARGET_DIR" -type f
+              else
+                echo "Skipping $ARTIFACT_NAME: Invalid or missing URL"
+              fi
             done
           else
             echo "No previous artifacts found for PR-${PR_ID}. Running fresh tests."
           fi
+        
         
         
 
