@@ -181,38 +181,39 @@ jobs:
                 fi
               done
           
+
       - name: Extract Failed and Passed Tests from Previous Run
         shell: bash
         run: |
-                mkdir -p artifacts/pr-${PR_ID}/${WORKFLOW_ID}
-                FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
-                ALL_TESTS_FILE="artifacts/pr-${PR_ID}/all_tests.txt"
-                REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
-            
-                # Collect all tests in the current matrix environment
-                tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep -v "SKIP" | grep "::" > $ALL_TESTS_FILE || true
-            
-                # Combine failed tests from all available previous workflow test_results.json
-                > $FAILED_TESTS_FILE
-                for result_file in artifacts/pr-${PR_ID}/*/test_results.json; do
-                  if [[ -f "$result_file" ]]; then
-                    echo "Processing failed tests from $result_file"
-                    jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' "$result_file" >> "$FAILED_TESTS_FILE"
+                  mkdir -p artifacts/pr-${PR_ID}/${WORKFLOW_ID}
+                  FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
+                  ALL_TESTS_FILE="artifacts/pr-${PR_ID}/all_tests.txt"
+                  REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
+              
+                  tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep -v "SKIP" | grep "::" > $ALL_TESTS_FILE || true
+              
+                  > $FAILED_TESTS_FILE
+                  for result_file in artifacts/pr-${PR_ID}/*/test_results.json; do
+                    if [[ -f "$result_file" ]]; then
+                      echo "Processing failed tests from $result_file"
+                      jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' "$result_file" >> "$FAILED_TESTS_FILE"
+                    fi
+                  done
+              
+                  sort -u "$FAILED_TESTS_FILE" -o "$FAILED_TESTS_FILE"
+              
+                  TARGET="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
+                  if [[ "$FAILED_TESTS_FILE" != "$TARGET" ]]; then
+                    cp "$FAILED_TESTS_FILE" "$TARGET"
                   fi
-                done
-            
-                # Remove duplicate entries
-                sort -u "$FAILED_TESTS_FILE" -o "$FAILED_TESTS_FILE"
-            
-                # copy to expected workflow-specific folder
-                cp "$FAILED_TESTS_FILE" "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
-            
-                if [[ -s "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt" ]]; then
-                  echo "Failed tests from the previous run:"
-                  cat "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
-                else
-                  echo "No previously failed tests found."
-                fi
+              
+                  if [[ -s "$TARGET" ]]; then
+                    echo "Failed tests from the previous run:"
+                    cat "$TARGET"
+                  else
+                    echo "No previously failed tests found."
+                  fi
+              
             
             
      
