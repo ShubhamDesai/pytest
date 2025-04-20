@@ -213,54 +213,66 @@ jobs:
                 fi
             
      
-      - name: Pre-Check for Previously Failed Tests
-        shell: bash
-        run: |
-          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
-          SKIPPED_TESTS_FILE="artifacts/pr-${PR_ID}/skipped_tests.txt"
+      # - name: Pre-Check for Previously Failed Tests
+      #   shell: bash
+      #   run: |
+      #     FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
+      #     SKIPPED_TESTS_FILE="artifacts/pr-${PR_ID}/skipped_tests.txt"
       
-          # Only run this check if we have previously failed tests
-          if [[ -s "$FAILED_TESTS_FILE" ]]; then
-            echo "Checking for skipped tests among previously failed tests..."
-            tox -e ${{ matrix.tox_env }} -- --collect-only -v $(cat $FAILED_TESTS_FILE) | grep "SKIP" | grep "::" | sed 's/.*SKIP //g' > $SKIPPED_TESTS_FILE
+      #     # Only run this check if we have previously failed tests
+      #     if [[ -s "$FAILED_TESTS_FILE" ]]; then
+      #       echo "Checking for skipped tests among previously failed tests..."
+      #       tox -e ${{ matrix.tox_env }} -- --collect-only -v $(cat $FAILED_TESTS_FILE) | grep "SKIP" | grep "::" | sed 's/.*SKIP //g' > $SKIPPED_TESTS_FILE
 
-            # Remove skipped tests from the failed tests list
-            if [[ -s "$SKIPPED_TESTS_FILE" ]]; then
-              echo "Removing skipped tests from the rerun list:"
-              cat $SKIPPED_TESTS_FILE
-              grep -v -F -f $SKIPPED_TESTS_FILE $FAILED_TESTS_FILE > "artifacts/pr-${PR_ID}/filtered_failed_tests.txt"
-              mv "artifacts/pr-${PR_ID}/filtered_failed_tests.txt" $FAILED_TESTS_FILE
-            else
-              echo "No skipped tests found among previously failed tests."
-            fi
-          fi
+      #       # Remove skipped tests from the failed tests list
+      #       if [[ -s "$SKIPPED_TESTS_FILE" ]]; then
+      #         echo "Removing skipped tests from the rerun list:"
+      #         cat $SKIPPED_TESTS_FILE
+      #         grep -v -F -f $SKIPPED_TESTS_FILE $FAILED_TESTS_FILE > "artifacts/pr-${PR_ID}/filtered_failed_tests.txt"
+      #         mv "artifacts/pr-${PR_ID}/filtered_failed_tests.txt" $FAILED_TESTS_FILE
+      #       else
+      #         echo "No skipped tests found among previously failed tests."
+      #       fi
+      #     fi
+
+      
 
       - name: Generate Failed Test Commands
         shell: bash
         run: |
-          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
-          
-          if [[ -s "$FAILED_TESTS_FILE" ]]; then
-            python scripts/generate_pytest_commands.py --input artifacts/pr-${PR_ID}/remaining_tests.txt --output-dir artifacts --pr-id ${PR_ID} --generate-script --batch-size 50 --tox-env ${{ matrix.tox_env }}
-          fi
-            
+            FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
+            REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
+            OUT_DIR="artifacts/pr-${PR_ID}/${WORKFLOW_ID}"
+        
+            if [[ -s "$FAILED_TESTS_FILE" ]]; then
+              python scripts/generate_pytest_commands.py \
+                --input "$REMAINING_TESTS_FILE" \
+                --output-dir "$OUT_DIR" \
+                --pr-id ${PR_ID} \
+                --generate-script \
+                --batch-size 50 \
+                --tox-env ${{ matrix.tox_env }}
+            fi
+        
+
       - name: Run Previously Failed Tests First
         shell: bash
         run: |
-          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
-      
-          if [[ -s "$FAILED_TESTS_FILE" ]]; then
-            echo "Rerunning previously failed tests using tox env ${{ matrix.tox_env }}..."
-            
-            if [[ -f "artifacts/pr-${PR_ID}/run_failed_tests.sh" ]]; then
-              chmod +x artifacts/pr-${PR_ID}/run_failed_tests.sh
-              bash artifacts/pr-${PR_ID}/run_failed_tests.sh
+            FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
+            FAILED_SCRIPT="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/run_failed_tests.sh"
+        
+            if [[ -s "$FAILED_TESTS_FILE" ]]; then
+              echo "Rerunning previously failed tests using tox env ${{ matrix.tox_env }}..."
+              if [[ -f "$FAILED_SCRIPT" ]]; then
+                chmod +x "$FAILED_SCRIPT"
+                bash "$FAILED_SCRIPT"
+              else
+                echo "No failed test script found at $FAILED_SCRIPT"
+              fi
             else
-              echo "No failed test script generated."
+              echo "No previously failed tests found."
             fi
-          else
-            echo "No previously failed tests found."
-          fi
+        
         
 
       - name: Check If Any Tests Failed Again
