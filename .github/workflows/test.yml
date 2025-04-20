@@ -426,7 +426,7 @@ jobs:
           name: pr-${{ env.PR_ID }}-${{ env.WORKFLOW_ID }}-test-results
           path: |
             artifacts/pr-${{ env.PR_ID }}/${{ env.WORKFLOW_ID }}/test_results.json
-            artifacts/pr-${{ env.PR_ID }}/${{ env.WORKFLOW_ID }}/failed_tests.txt
+            artifacts/pr-${{ env.PR_ID }}/${{ env.WORKFLOW_ID }}/*_tests.txt
             artifacts/pr-${{ env.PR_ID }}/${{ env.WORKFLOW_ID }}/*.sh
                 
   retrieve-results:
