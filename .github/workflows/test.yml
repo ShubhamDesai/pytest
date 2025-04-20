@@ -256,6 +256,24 @@ jobs:
       #             --tox-env ${{ matrix.tox_env }}
       #         fi
           
+      - name: Generate Failed Test Commands
+        shell: bash
+        run: |
+          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
+          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
+          OUT_DIR="artifacts/pr-${PR_ID}/${WORKFLOW_ID}"
+    
+          if [[ -s "$FAILED_TESTS_FILE" ]]; then
+            python scripts/generate_pytest_commands.py \
+              --input "$REMAINING_TESTS_FILE" \
+              --output-dir "$OUT_DIR" \
+              --pr-id ${PR_ID} \
+              --workflow-id ${WORKFLOW_ID} \
+              --generate-script \
+              --batch-size 50 \
+              --tox-env ${{ matrix.tox_env }}
+          fi
+    
         
 
       - name: Run Previously Failed Tests First
