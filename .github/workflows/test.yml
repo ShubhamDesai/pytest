@@ -204,8 +204,8 @@ jobs:
                 # Remove duplicate entries
                 sort -u "$FAILED_TESTS_FILE" -o "$FAILED_TESTS_FILE"
             
-                # Move to expected workflow-specific folder
-                mv "$FAILED_TESTS_FILE" "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
+                # copy to expected workflow-specific folder
+                cp "$FAILED_TESTS_FILE" "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
             
                 if [[ -s "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt" ]]; then
                   echo "Failed tests from the previous run:"
