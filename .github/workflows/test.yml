@@ -256,6 +256,10 @@ jobs:
       #             --tox-env ${{ matrix.tox_env }}
       #         fi
     
+      - name: Set Workflow ID
+        shell: bash
+        run: echo "WORKFLOW_ID=${{ matrix.name }}" >> $GITHUB_ENV
+
 
       - name: Generate Failed Test Commands
         shell: bash
