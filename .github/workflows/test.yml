@@ -321,7 +321,7 @@ jobs:
                         --tox-env ${{ matrix.tox_env }} \
                         --prefix failed
                 
-                      SCRIPT_PATH="$OUT_DIR/run_failed_tests_failed.sh"
+                      SCRIPT_PATH="$OUT_DIR/run_failed_tests.sh"
                       echo "Looking for generated script at: $SCRIPT_PATH"
                       if [[ -f "$SCRIPT_PATH" ]]; then
                         echo "Script content:"
@@ -340,7 +340,7 @@ jobs:
         shell: bash
         run: |
               FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
-              FAILED_SCRIPT="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/run_failed_tests_failed.sh"
+              FAILED_SCRIPT="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/run_failed_tests.sh"
           
               if [[ -s "$FAILED_TESTS_FILE" ]]; then
                 echo "Rerunning previously failed tests using tox env ${{ matrix.tox_env }}..."
