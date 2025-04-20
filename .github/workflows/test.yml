@@ -262,23 +262,38 @@ jobs:
 
 
 
+      
+
       - name: Generate Failed Test Commands
         shell: bash
         run: |
-                FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
-                OUT_DIR="artifacts/pr-${PR_ID}/${WORKFLOW_ID}"
-            
-                if [[ -s "$FAILED_TESTS_FILE" ]]; then
-                  python scripts/generate_pytest_commands.py \
-                    --input "$FAILED_TESTS_FILE" \
-                    --output-dir "$OUT_DIR" \
-                    --pr-id ${PR_ID} \
-                    --workflow-id ${WORKFLOW_ID} \
-                    --generate-script \
-                    --batch-size 50 \
-                    --tox-env ${{ matrix.tox_env }} \
-                    --prefix failed
-                fi
+                  FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
+                  OUT_DIR="artifacts/pr-${PR_ID}/${WORKFLOW_ID}"
+              
+                  if [[ -s "$FAILED_TESTS_FILE" ]]; then
+                    echo "Generating script for failed tests..."
+                    python scripts/generate_pytest_commands.py \
+                      --input "$FAILED_TESTS_FILE" \
+                      --output-dir "$OUT_DIR" \
+                      --pr-id ${PR_ID} \
+                      --workflow-id ${WORKFLOW_ID} \
+                      --generate-script \
+                      --batch-size 50 \
+                      --tox-env ${{ matrix.tox_env }} \
+                      --prefix failed
+              
+                    echo "Checking generated script..."
+                    SCRIPT_PATH="$OUT_DIR/run_failed_tests_failed.sh"
+                    if [[ -f "$SCRIPT_PATH" ]]; then
+                      echo "Script content:"
+                      cat "$SCRIPT_PATH"
+                    else
+                      echo "Script not found at $SCRIPT_PATH"
+                    fi
+                  else
+                    echo "No failed tests found to generate script."
+                  fi
+              
             
       
       - name: Run Previously Failed Tests First
