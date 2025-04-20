@@ -317,7 +317,7 @@ jobs:
       - name: Debug Generated Failed Test Script
         shell: bash
         run: |
-                  SCRIPT_PATH="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/run_failed_tests.sh""
+                  SCRIPT_PATH="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/run_failed_tests.sh"
                   echo "Looking for script at: $SCRIPT_PATH"
               
                   if [[ -f "$SCRIPT_PATH" ]]; then
