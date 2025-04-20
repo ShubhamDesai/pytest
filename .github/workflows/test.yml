@@ -336,7 +336,8 @@ jobs:
             FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
             FAILED_SCRIPT="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/run_failed_tests.sh"
             echo "Listing all files in the repository:"
-            find . -type f
+            ls -R | grep ":$" | sed 's/://g' | while read dir; do ls "$dir" | while read file; do echo "$dir/$file"; done; done
+            find . -type f
         
             if [[ -s "$FAILED_TESTS_FILE" ]]; then
               echo "Rerunning previously failed tests using tox env ${{ matrix.tox_env }}..."
