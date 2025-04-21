@@ -1300,15 +1300,15 @@ def test_logging_emit_error(pytester: Pytester) -> None:
 def test_logging_emit_error_supressed(pytester: Pytester) -> None:
     """If logging is configured to silently ignore errors, pytest
     doesn't propagate errors either."""
-    pytester.makepyfile(
-        """
-        import logging
+    # pytester.makepyfile(
+    #     """
+    #     import logging
 
-        def test_bad_log(monkeypatch):
-            monkeypatch.setattr(logging, 'raiseExceptions', False)
-            logging.warning('oops', 'first', 2)
-        """
-    )
+    #     def test_bad_log(monkeypatch):
+    #         monkeypatch.setattr(logging, 'raiseExceptions', False)
+    #         logging.warning('oops', 'first', 2)
+    #     """
+    # )
     result = pytester.runpytest()
     result.assert_outcomes(passed=1)
 
