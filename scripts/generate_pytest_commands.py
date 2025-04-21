@@ -5,7 +5,7 @@ import glob
 import argparse
 from pathlib import Path
 
-def combine_test_results(pr_id, workflow_id, output_dir="artifacts"):
+def combine_test_results(pr_id, workflow_id, output_dir="artifacts", prefix=''):
     """
     Combine all batch test results into a single JSON file.
     
@@ -85,7 +85,10 @@ def combine_test_results(pr_id, workflow_id, output_dir="artifacts"):
             print(f"Error processing {batch_file}: {e}")
     
     # Save combined results
-    combined_file = output_path / "test_results.json"
+    if prefix=="failed":
+        combined_file = output_path / "temp_test_results.json"
+    else:
+        combined_file = output_path / "test_results.json"
     with open(combined_file, 'w') as f:
         json.dump(combined_results, f, indent=2)
     
@@ -262,7 +265,7 @@ def main():
     args = parser.parse_args()
     
     if args.combine_results:
-        combine_test_results(args.pr_id, args.workflow_id, args.output_dir)
+        combine_test_results(args.pr_id, args.workflow_id, args.output_dir, args.prefix)
         return
     
     if not args.input:
