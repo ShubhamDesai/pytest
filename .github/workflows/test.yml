@@ -213,6 +213,32 @@ jobs:
       #           else
       #             echo "No previously failed tests found."
       #           fi
+
+      - name: Set Workflow ID
+        shell: bash
+        run: echo "WORKFLOW_ID=${{ matrix.name }}" >> $GITHUB_ENV
+
+
+      - name: Print Contents of Retrieved Workflow Artifacts
+        shell: bash
+        run: |
+          echo "Checking all workflow-specific artifact folders under artifacts/pr-${PR_ID}/"
+      
+          for dir in artifacts/pr-${PR_ID}/*; do
+            if [[ -d "$dir" ]]; then
+              echo "--------------------------------------------"
+              echo "Directory: $dir"
+      
+              for file in "$dir"/*; do
+                echo "File: $file"
+                echo "----- CONTENT START -----"
+                cat "$file" || echo "[Failed to read $file]"
+                echo "-----  CONTENT END  -----"
+                echo ""
+              done
+            fi
+          done
+      
             
             
       - name: Extract Failed and Passed Tests from Previous Run
@@ -335,9 +361,8 @@ jobs:
         run: |
             FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
             FAILED_SCRIPT="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/run_failed_tests.sh"
-            echo "Listing all files in the repository:"
-            ls -R | grep ":$" | sed 's/://g' | while read dir; do ls "$dir" | while read file; do echo "$dir/$file"; done; done
-            find . -type f
+            echo "DEBUG: Showing contents of $FAILED_TESTS_FILE"
+            cat "$FAILED_TESTS_FILE"
         
             if [[ -s "$FAILED_TESTS_FILE" ]]; then
               echo "Rerunning previously failed tests using tox env ${{ matrix.tox_env }}..."
