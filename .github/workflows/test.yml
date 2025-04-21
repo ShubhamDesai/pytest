@@ -359,23 +359,23 @@ jobs:
         shell: bash
         run: |
           OUT_DIR="artifacts/pr-${PR_ID}/${WORKFLOW_ID}"
-          FAILED_TESTS_FILE="${OUT_DIR}/failed_tests.txt"
+          # FAILED_TESTS_FILE="${OUT_DIR}/failed_tests.txt"
           FAILED_SCRIPT="${OUT_DIR}/run_failed_tests.sh"
       
-          echo "DEBUG: Showing contents of $FAILED_TESTS_FILE"
-          cat "$FAILED_TESTS_FILE" || echo "(File not found)"
+          # echo "DEBUG: Showing contents of $FAILED_TESTS_FILE"
+          # cat "$FAILED_TESTS_FILE" || echo "(File not found)"
       
-          if [[ -s "$FAILED_TESTS_FILE" ]]; then
-            echo "Rerunning previously failed tests using tox env ${{ matrix.tox_env }}..."
-            if [[ -f "$FAILED_SCRIPT" ]]; then
-              chmod +x "$FAILED_SCRIPT"
-              bash "$FAILED_SCRIPT"
-            else
-              echo "No failed test script found at $FAILED_SCRIPT"
-            fi
+          # if [[ -s "$FAILED_TESTS_FILE" ]]; then
+          echo "Rerunning previously failed tests using tox env ${{ matrix.tox_env }}..."
+          if [[ -f "$FAILED_SCRIPT" ]]; then
+            chmod +x "$FAILED_SCRIPT"
+            bash "$FAILED_SCRIPT"
           else
-            echo "No previously failed tests found."
+            echo "No failed test script found at $FAILED_SCRIPT"
           fi
+          # else
+          #   echo "No previously failed tests found."
+          # fi
       
 
 
