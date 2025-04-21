@@ -348,14 +348,14 @@ jobs:
           # Create remaining tests
           echo "Finding remaining tests to run..."
           if [[ -s "$ALL_TESTS_FILE" ]]; then
-            grep -v -F -f "$FAILED_TESTS_FILE" "$ALL_TESTS_FILE" > "$REMAINING_TESTS_FILE" || true
+            grep -v -F -f $FAILED_TESTS_FILE $ALL_TESTS_FILE > $REMAINING_TESTS_FILE || true
           else
             echo "Error: ALL_TESTS_FILE is empty or missing"
             exit 1
           fi
       
           # Output results
-          if [[ -s "$REMAINING_TESTS_FILE" ]]; then
+          if [[ -s $REMAINING_TESTS_FILE ]]; then
             echo "Remaining tests to run:"
             cat "$REMAINING_TESTS_FILE"
           else
