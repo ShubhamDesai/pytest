@@ -32,12 +32,10 @@ class CommonFSTests:
         p1 = path1.join("sampledir")
         p2 = path1.join("sampledir")
         assert p1 == p2
-        assert False, "Intentional failure for CI testing"
 
 
     def test_new_identical(self, path1):
         assert path1 == path1.new()
-        assert False, "Intentional failure for CI testing"
 
 
     def test_join(self, path1):
