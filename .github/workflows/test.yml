@@ -377,73 +377,6 @@ jobs:
           #   echo "No previously failed tests found."
           # fi
       
-
-
-
-
-
-
-      # - name: Generate Failed Test Commands
-      #   shell: bash
-      #   run: |
-      #           FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
-      #           OUT_DIR="artifacts/pr-${PR_ID}/${WORKFLOW_ID}"
-            
-      #           if [[ -s "$FAILED_TESTS_FILE" ]]; then
-      #             python scripts/generate_pytest_commands.py \
-      #               --input "$FAILED_TESTS_FILE" \
-      #               --output-dir "$OUT_DIR" \
-      #               --pr-id ${PR_ID} \
-      #               --workflow-id ${WORKFLOW_ID} \
-      #               --generate-script \
-      #               --batch-size 50 \
-      #               --tox-env ${{ matrix.tox_env }} \
-      #               --prefix failed
-      #           fi
-          
-                
-      # - name: Debug Generated Failed Test Script
-      #   shell: bash
-      #   run: |
-      #             SCRIPT_PATH="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/run_failed_tests.sh"
-      #             echo "Looking for script at: $SCRIPT_PATH"
-              
-      #             if [[ -f "$SCRIPT_PATH" ]]; then
-      #               echo "Script exists. Showing contents:"
-      #               cat "$SCRIPT_PATH"
-      #             else
-      #               echo "Script not found!"
-      #               ls -R artifacts/pr-${PR_ID}/${WORKFLOW_ID} || echo "Directory missing"
-      #             fi
-
-
-          
-      # - name: Run Previously Failed Tests First
-      #   shell: bash
-      #   run: |
-      #       FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
-      #       FAILED_SCRIPT="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/run_failed_tests.sh"
-      #       echo "DEBUG: Showing contents of $FAILED_TESTS_FILE"
-      #       cat "$FAILED_TESTS_FILE"
-        
-      #       if [[ -s "$FAILED_TESTS_FILE" ]]; then
-      #         echo "Rerunning previously failed tests using tox env ${{ matrix.tox_env }}..."
-      #         if [[ -f "$FAILED_SCRIPT" ]]; then
-      #           chmod +x "$FAILED_SCRIPT"
-      #           bash "$FAILED_SCRIPT"
-      #         else
-      #           echo "No failed test script found at $FAILED_SCRIPT"
-      #         fi
-      #       else
-      #         echo "No previously failed tests found."
-      #       fi
-
-
-      
-
-        
-        
-
       - name: Check If Any Tests Failed Again
         shell: bash
         run: |
@@ -462,6 +395,8 @@ jobs:
               echo "The following tests were skipped during execution:"
               cat "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/skipped_tests_report.txt"
             fi
+          else
+            echo "No remaining tests to run."
           fi
           
           if [[ -s "$FAILED_AGAIN_FILE" ]]; then
