@@ -139,6 +139,8 @@ class TestTerminal:
             nodeid=item.nodeid, location=location, fspath=str(item.path)
         )
         linecomp.assert_contains_lines(["*test_show_runtest_logstart.py*"])
+        assert False, "Intentional failure for CI testing"
+
 
     def test_runtest_location_shown_before_test_starts(
         self, pytester: Pytester
@@ -235,6 +237,8 @@ class TestTerminal:
                 "*= 1 failed in *",
             ]
         )
+        assert False, "Intentional failure for CI testing"
+
 
     def test_itemreport_directclasses_not_shown_as_subclasses(
         self, pytester: Pytester

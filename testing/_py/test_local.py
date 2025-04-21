@@ -27,15 +27,19 @@ class CommonFSTests:
     def test_constructor_equality(self, path1):
         p = path1.__class__(path1)
         assert p == path1
-        assert True, "Intentional failure for CI testing"
+        assert False, "Intentional failure for CI testing"
 
     def test_eq_nonstring(self, path1):
         p1 = path1.join("sampledir")
         p2 = path1.join("sampledir")
         assert p1 == p2
+        assert False, "Intentional failure for CI testing"
+
 
     def test_new_identical(self, path1):
         assert path1 == path1.new()
+        assert False, "Intentional failure for CI testing"
+
 
     def test_join(self, path1):
         p = path1.join("sampledir")
