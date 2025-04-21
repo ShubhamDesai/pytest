@@ -322,9 +322,13 @@ jobs:
       - name: Generate Failed Test Commands
         shell: bash
         run: |
-          OUT_DIR="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results"
-          FAILED_TESTS_FILE="${OUT_DIR}/failed_tests.txt"
-          
+          OUT_DIR="artifacts"
+          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/failed_tests.txt"
+          if [ -f "$FAILED_TESTS_FILE" ]; then
+            echo "Failed tests file exists at: $FAILED_TESTS_FILE"
+          else
+            echo "Failed tests file does NOT exist."
+          fi
           if [[ -s "$FAILED_TESTS_FILE" ]]; then
             python scripts/generate_pytest_commands.py \
               --input "$FAILED_TESTS_FILE" \
@@ -340,7 +344,7 @@ jobs:
       - name: Debug Generated Failed Test Script
         shell: bash
         run: |
-          SCRIPT_PATH="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/run_failed_tests.sh"
+          SCRIPT_PATH="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/run_failed_tests.sh"
           echo "Looking for script at: $SCRIPT_PATH"
       
           if [[ -f "$SCRIPT_PATH" ]]; then

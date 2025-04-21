@@ -258,7 +258,7 @@ def main():
     parser.add_argument('--prefix', default='', help='Prefix for output files (e.g., "failed" for failed tests)')
     parser.add_argument('--tox-env', default='', help='Tox environment to use')
     parser.add_argument('--combine-results', action='store_true', help='Combine batch results into a single file')
-    
+    # FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/failed_tests.txt"
     args = parser.parse_args()
     
     if args.combine_results:
