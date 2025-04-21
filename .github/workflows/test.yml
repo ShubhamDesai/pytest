@@ -339,7 +339,7 @@ jobs:
         run: |
           FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/failed_tests.txt"
           ALL_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/all_tests.txt"
-          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/remaining_tests.txt"
+          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/remaining_tests.txt"
       
           # Debugging
           echo "==== Debugging ===="
@@ -371,7 +371,7 @@ jobs:
       - name: Generate Test Commands
         shell: bash
         run: |
-          python scripts/generate_pytest_commands.py --input artifacts/pr-${PR_ID}/${WORKFLOW_ID}/remaining_tests.txt --output-dir artifacts --pr-id ${PR_ID} --workflow-id ${WORKFLOW_ID} --generate-script --batch-size 20 --tox-env ${{ matrix.tox_env }}
+          python scripts/generate_pytest_commands.py --input artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/remaining_tests.txt --output-dir artifacts --pr-id ${PR_ID} --workflow-id ${WORKFLOW_ID} --generate-script --batch-size 20 --tox-env ${{ matrix.tox_env }}
 
       - name: Display Retrieved Test Results
         shell: bash
@@ -387,7 +387,7 @@ jobs:
       - name: Run Remaining Test Cases
         shell: bash
         run: |
-          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/remaining_tests.txt"
+          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/remaining_tests.txt"
           
           if [[ -s "$REMAINING_TESTS_FILE" ]]; then
             echo "Running remaining test cases using tox env ${{ matrix.tox_env }}..."
