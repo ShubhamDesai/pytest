@@ -181,39 +181,6 @@ jobs:
                 fi
               done
           
-      # - name: Extract Failed and Passed Tests from Previous Run
-      #   shell: bash
-      #   run: |
-      #           mkdir -p artifacts/pr-${PR_ID}/${WORKFLOW_ID}
-      #           FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
-      #           ALL_TESTS_FILE="artifacts/pr-${PR_ID}/all_tests.txt"
-      #           REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
-            
-      #           # Collect all tests in the current matrix environment
-      #           tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep -v "SKIP" | grep "::" > $ALL_TESTS_FILE || true
-            
-      #           # Combine failed tests from all available previous workflow test_results.json
-      #           > $FAILED_TESTS_FILE
-      #           for result_file in artifacts/pr-${PR_ID}/*/test_results.json; do
-      #             if [[ -f "$result_file" ]]; then
-      #               echo "Processing failed tests from $result_file"
-      #               jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' "$result_file" >> "$FAILED_TESTS_FILE"
-      #             fi
-      #           done
-            
-      #           # Remove duplicate entries
-      #           sort -u "$FAILED_TESTS_FILE" -o "$FAILED_TESTS_FILE"
-            
-      #           # Move to expected workflow-specific folder
-      #           mv "$FAILED_TESTS_FILE" "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
-            
-      #           if [[ -s "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt" ]]; then
-      #             echo "Failed tests from the previous run:"
-      #             cat "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
-      #           else
-      #             echo "No previously failed tests found."
-      #           fi
-
       - name: Set Workflow ID
         shell: bash
         run: echo "WORKFLOW_ID=${{ matrix.name }}" >> $GITHUB_ENV
@@ -246,7 +213,7 @@ jobs:
         run: |
                   mkdir -p artifacts/pr-${PR_ID}/${WORKFLOW_ID}
               
-                  FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
+                  FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/failed_tests.txt"
                   ALL_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/all_tests.txt"
                   REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/remaining_tests.txt"
               
@@ -273,48 +240,7 @@ jobs:
                   else
                     echo "No failed tests found for this workflow."
                   fi
-              
-     
-      # - name: Pre-Check for Previously Failed Tests
-      #   shell: bash
-      #   run: |
-      #     FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
-      #     SKIPPED_TESTS_FILE="artifacts/pr-${PR_ID}/skipped_tests.txt"
-      
-      #     # Only run this check if we have previously failed tests
-      #     if [[ -s "$FAILED_TESTS_FILE" ]]; then
-      #       echo "Checking for skipped tests among previously failed tests..."
-      #       tox -e ${{ matrix.tox_env }} -- --collect-only -v $(cat $FAILED_TESTS_FILE) | grep "SKIP" | grep "::" | sed 's/.*SKIP //g' > $SKIPPED_TESTS_FILE
-
-      #       # Remove skipped tests from the failed tests list
-      #       if [[ -s "$SKIPPED_TESTS_FILE" ]]; then
-      #         echo "Removing skipped tests from the rerun list:"
-      #         cat $SKIPPED_TESTS_FILE
-      #         grep -v -F -f $SKIPPED_TESTS_FILE $FAILED_TESTS_FILE > "artifacts/pr-${PR_ID}/filtered_failed_tests.txt"
-      #         mv "artifacts/pr-${PR_ID}/filtered_failed_tests.txt" $FAILED_TESTS_FILE
-      #       else
-      #         echo "No skipped tests found among previously failed tests."
-      #       fi
-      #     fi
-
-      # - name: Generate Failed Test Commands
-      #   shell: bash
-      #   run: |
-      #         FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
-      #         REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
-      #         OUT_DIR="artifacts/pr-${PR_ID}/${WORKFLOW_ID}"
-          
-      #         if [[ -s "$FAILED_TESTS_FILE" ]]; then
-      #           python scripts/generate_pytest_commands.py \
-      #             --input "$REMAINING_TESTS_FILE" \
-      #             --output-dir "$OUT_DIR" \
-      #             --pr-id ${PR_ID} \
-      #             --workflow-id ${WORKFLOW_ID} \
-      #             --generate-script \
-      #             --batch-size 50 \
-      #             --tox-env ${{ matrix.tox_env }}
-      #         fi
-    
+                  
       - name: Set Workflow ID
         shell: bash
         run: echo "WORKFLOW_ID=${{ matrix.name }}" >> $GITHUB_ENV
@@ -407,7 +333,7 @@ jobs:
       - name: Identify Remaining Untested Test Cases
         shell: bash
         run: |
-          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
+          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/failed_tests.txt"
           ALL_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/all_tests.txt"
           REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/remaining_tests.txt"
 
@@ -639,32 +565,3 @@ jobs:
           name: pr-${{ env.PR_ID }}-combined-test-results
           path: retrieved-results/combined_results.json
 
-      
-
-    
-
-  # # retrieve-results:
-  #   needs: run-tests
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Get PR ID
-  #       if: github.event_name == 'pull_request'
-  #       run: echo "PR_ID=${{ github.event.number }}" >> $GITHUB_ENV
-
-  #     - name: Set Default Folder for Non-PR Runs
-  #       if: github.event_name != 'pull_request'
-  #       run: echo "PR_ID=main" >> $GITHUB_ENV
-
-  #     - name: Download Test Results
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: pr-${{ env.PR_ID }}-test-results
-  #         path: retrieved-results
-
-  #     - name: Display Retrieved Test Results
-  #       shell: bash
-  #       run: |
-  #         echo "======================================="
-  #         echo "Retrieved Test Results from PR ${PR_ID}:"
-  #         cat retrieved-results/test_results.json
-  #         echo "======================================="
