@@ -237,7 +237,6 @@ class TestTerminal:
                 "*= 1 failed in *",
             ]
         )
-        assert False, "Intentional failure for CI testing"
 
 
     def test_itemreport_directclasses_not_shown_as_subclasses(
