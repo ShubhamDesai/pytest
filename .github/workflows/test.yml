@@ -247,8 +247,8 @@ jobs:
                   mkdir -p artifacts/pr-${PR_ID}/${WORKFLOW_ID}
               
                   FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
-                  ALL_TESTS_FILE="artifacts/pr-${PR_ID}/all_tests.txt"
-                  REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
+                  ALL_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/all_tests.txt"
+                  REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/remaining_tests.txt"
               
                   # Collect all tests in the current matrix environment
                   tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep -v "SKIP" | grep "::" > "$ALL_TESTS_FILE" || true
