@@ -447,8 +447,8 @@ jobs:
       - name: Check If Any Tests Failed Again
         shell: bash
         run: |
-          TEMP_RESULTS="artifacts/pr-${PR_ID}/temp_test_results.json"
-          FAILED_AGAIN_FILE="artifacts/pr-${PR_ID}/failed_again.txt"
+          TEMP_RESULTS="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/temp_test_results.json"
+          FAILED_AGAIN_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_again.txt"
           
           if [[ -f "$TEMP_RESULTS" ]]; then
             echo "Analyzing test results..."
@@ -458,9 +458,9 @@ jobs:
             cat $TEMP_RESULTS | jq -r '.tests | map(select(.outcome == "skipped")) | .[].nodeid' > "artifacts/pr-${PR_ID}/skipped_tests_report.txt"
             
             # Report on skipped tests
-            if [[ -s "artifacts/pr-${PR_ID}/skipped_tests_report.txt" ]]; then
+            if [[ -s "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/skipped_tests_report.txt" ]]; then
               echo "The following tests were skipped during execution:"
-              cat "artifacts/pr-${PR_ID}/skipped_tests_report.txt"
+              cat "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/skipped_tests_report.txt"
             fi
           fi
           
@@ -472,9 +472,9 @@ jobs:
       - name: Identify Remaining Untested Test Cases
         shell: bash
         run: |
-          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
-          ALL_TESTS_FILE="artifacts/pr-${PR_ID}/all_tests.txt"
-          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
+          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_tests.txt"
+          ALL_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/all_tests.txt"
+          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/remaining_tests.txt"
 
           echo "Finding remaining tests to run..."
           grep -v -F -f $FAILED_TESTS_FILE $ALL_TESTS_FILE > $REMAINING_TESTS_FILE || true
@@ -493,12 +493,12 @@ jobs:
       - name: Generate Test Commands
         shell: bash
         run: |
-          python scripts/generate_pytest_commands.py --input artifacts/pr-${PR_ID}/remaining_tests.txt --output-dir artifacts --pr-id ${PR_ID} --workflow-id ${WORKFLOW_ID} --generate-script --batch-size 20 --tox-env ${{ matrix.tox_env }}
+          python scripts/generate_pytest_commands.py --input artifacts/pr-${PR_ID}/${WORKFLOW_ID}/remaining_tests.txt --output-dir artifacts --pr-id ${PR_ID} --workflow-id ${WORKFLOW_ID} --generate-script --batch-size 20 --tox-env ${{ matrix.tox_env }}
 
       - name: Display Retrieved Test Results
         shell: bash
         run: |
-          RUN_TESTS_FILE="artifacts/pr-${PR_ID}/run_tests.sh"
+          RUN_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/run_tests.sh"
           if [[ -f "$RUN_TESTS_FILE" ]]; then
             echo "Content of run_tests.sh:"
             cat "$RUN_TESTS_FILE"
@@ -509,7 +509,7 @@ jobs:
       - name: Run Remaining Test Cases
         shell: bash
         run: |
-          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
+          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/remaining_tests.txt"
           
           if [[ -s "$REMAINING_TESTS_FILE" ]]; then
             echo "Running remaining test cases using tox env ${{ matrix.tox_env }}..."
