@@ -338,23 +338,7 @@ jobs:
           REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/remaining_tests.txt"
 
           echo "Finding remaining tests to run..."
-          # grep -v -F -f $FAILED_TESTS_FILE $ALL_TESTS_FILE > $REMAINING_TESTS_FILE || true
-          echo "Contents of ALL_TESTS_FILE ($ALL_TESTS_FILE):"
-          cat "$ALL_TESTS_FILE"
-          echo "-----"
-
-          # Filter out failed tests
-          grep -v -F -f "$FAILED_TESTS_FILE" "$ALL_TESTS_FILE" > "$REMAINING_TESTS_FILE"
-
-          echo "Contents of REMAINING_TESTS_FILE ($REMAINING_TESTS_FILE):"
-          cat "$REMAINING_TESTS_FILE"
-          echo "-----"
-
-          if [ ! -s "$REMAINING_TESTS_FILE" ]; then
-              echo "No remaining tests found: all tests in ALL_TESTS_FILE were also in FAILED_TESTS_FILE."
-          fi
-
-          #till here
+          grep -v -F -f $FAILED_TESTS_FILE $ALL_TESTS_FILE > $REMAINING_TESTS_FILE || true
 
           if [[ -s "$REMAINING_TESTS_FILE" ]]; then
             echo "Remaining tests to run:"
