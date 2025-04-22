@@ -249,6 +249,22 @@ jobs:
         shell: bash
         run: echo "WORKFLOW_ID=${{ matrix.name }}" >> $GITHUB_ENV
 
+      - name: Delete all previous test artifacts for this PR
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            pr-${{ env.PR_ID }}-windows-py310-test-results
+            pr-${{ env.PR_ID }}-windows-py311-test-results
+            pr-${{ env.PR_ID }}-windows-py312-test-results
+            pr-${{ env.PR_ID }}-windows-py313-test-results
+            pr-${{ env.PR_ID }}-windows-py39-pluggy-test-results
+            pr-${{ env.PR_ID }}-windows-py39-unittestextras-test-results
+            pr-${{ env.PR_ID }}-windows-py39-xdist-test-results
+            pr-${{ env.PR_ID }}-combined-test-results
+        continue-on-error: true
+      
+
+
       - name: Generate Failed Test Commands
         shell: bash
         run: |
@@ -449,6 +465,20 @@ jobs:
         with:
           fetch-depth: 0
       
+      - name: Delete all previous test artifacts for this PR
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            pr-${{ env.PR_ID }}-windows-py310-test-results
+            pr-${{ env.PR_ID }}-windows-py311-test-results
+            pr-${{ env.PR_ID }}-windows-py312-test-results
+            pr-${{ env.PR_ID }}-windows-py313-test-results
+            pr-${{ env.PR_ID }}-windows-py39-pluggy-test-results
+            pr-${{ env.PR_ID }}-windows-py39-unittestextras-test-results
+            pr-${{ env.PR_ID }}-windows-py39-xdist-test-results
+            pr-${{ env.PR_ID }}-combined-test-results
+        continue-on-error: true
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
