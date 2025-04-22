@@ -249,22 +249,6 @@ jobs:
         shell: bash
         run: echo "WORKFLOW_ID=${{ matrix.name }}" >> $GITHUB_ENV
 
-      - name: Delete all previous test artifacts for this PR
-        uses: geekyeggo/delete-artifact@v5
-        with:
-          name: |
-            pr-${{ env.PR_ID }}-windows-py310-test-results
-            pr-${{ env.PR_ID }}-windows-py311-test-results
-            pr-${{ env.PR_ID }}-windows-py312-test-results
-            pr-${{ env.PR_ID }}-windows-py313-test-results
-            pr-${{ env.PR_ID }}-windows-py39-pluggy-test-results
-            pr-${{ env.PR_ID }}-windows-py39-unittestextras-test-results
-            pr-${{ env.PR_ID }}-windows-py39-xdist-test-results
-            pr-${{ env.PR_ID }}-combined-test-results
-        continue-on-error: true
-      
-
-
       - name: Generate Failed Test Commands
         shell: bash
         run: |
@@ -357,26 +341,29 @@ jobs:
           ALL_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/all_tests.txt"
           REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/remaining_tests.txt"
       
-          # Debugging
           echo "==== Debugging ===="
-          echo "Failed Tests File: $FAILED_TESTS_FILE"  
+          echo "Failed Tests File: $FAILED_TESTS_FILE"
+          
+          # Handle empty/missing files
+          touch "$FAILED_TESTS_FILE"  # Ensure file exists even if empty
+      
           echo "Checking for blank lines in failed_tests.txt"
           grep '^$' "$FAILED_TESTS_FILE" && echo "Blank lines found!"
-
+      
           echo "Normalizing line endings..."
-          sed -i 's/\r$//' "$ALL_TESTS_FILE"
-          sed -i 's/\r$//' "$FAILED_TESTS_FILE"
-
+          sed -i 's/\r$//' "$ALL_TESTS_FILE" || true
+          sed -i 's/\r$//' "$FAILED_TESTS_FILE" || true
+      
           echo "Removing blank lines from failed_tests.txt"
-          grep -v '^$' "$FAILED_TESTS_FILE" > "${FAILED_TESTS_FILE}.filtered"
+          grep -v '^$' "$FAILED_TESTS_FILE" > "${FAILED_TESTS_FILE}.filtered" || true
           mv "${FAILED_TESTS_FILE}.filtered" "$FAILED_TESTS_FILE"
-
+      
           echo "Running grep to find remaining tests..."
           grep -v -F -f "$FAILED_TESTS_FILE" "$ALL_TESTS_FILE" > "$REMAINING_TESTS_FILE" || true
-
+      
           echo "Contents of remaining_tests.txt:"
           cat "$REMAINING_TESTS_FILE"
-
+        
 
       - name: Set Workflow ID
         shell: bash
@@ -465,20 +452,6 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Delete all previous test artifacts for this PR
-        uses: geekyeggo/delete-artifact@v5
-        with:
-          name: |
-            pr-${{ env.PR_ID }}-windows-py310-test-results
-            pr-${{ env.PR_ID }}-windows-py311-test-results
-            pr-${{ env.PR_ID }}-windows-py312-test-results
-            pr-${{ env.PR_ID }}-windows-py313-test-results
-            pr-${{ env.PR_ID }}-windows-py39-pluggy-test-results
-            pr-${{ env.PR_ID }}-windows-py39-unittestextras-test-results
-            pr-${{ env.PR_ID }}-windows-py39-xdist-test-results
-            pr-${{ env.PR_ID }}-combined-test-results
-        continue-on-error: true
-
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
