@@ -33,6 +33,7 @@ class CommonFSTests:
         p2 = path1.join("sampledir")
         assert p1 == p2
 
+
     def test_new_identical(self, path1):
         assert path1 == path1.new()
 

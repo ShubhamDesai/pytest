@@ -119,8 +119,8 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${{ github.repository }}/actions/artifacts")
 
-          ARTIFACT_COUNT=$(echo "$ARTIFACTS_RESPONSE" | jq -r --arg PR "pr-${PR_ID}-test-results" \
-            '[.artifacts[] | select(.name==$PR)] | length')
+          ARTIFACT_COUNT=$(echo "$ARTIFACTS_RESPONSE" | jq -r --arg PR "pr-${PR_ID}-" \
+            '[.artifacts[] | select(.name | startswith($PR))] | length')
 
           if [[ "$ARTIFACT_COUNT" -gt 0 ]]; then
             echo "PREV_ARTIFACT_EXISTS=true" >> $GITHUB_ENV
@@ -128,116 +128,190 @@ jobs:
             echo "PREV_ARTIFACT_EXISTS=false" >> $GITHUB_ENV
           fi
 
+      - name: Debug Artifact Structure
+        shell: bash
+        run: |
+          echo "Listing artifacts for PR ${PR_ID}..."
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts" | jq '.artifacts[] | {name, size_in_bytes, archive_download_url, created_at}'
+        
+
       - name: Retrieve Previous Artifacts (If Exists)
         if: env.PREV_ARTIFACT_EXISTS == 'true'
         shell: bash
         run: |
-          echo "Fetching previous test results for PR ${PR_ID}..."
+              echo "Fetching previous test results for PR ${PR_ID}..."
+          
+              ARTIFACTS_RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/artifacts")
+          
+              echo "$ARTIFACTS_RESPONSE" | jq -r --arg PR "pr-${PR_ID}-" '
+                .artifacts
+                | map(select(.name | startswith($PR)))
+                | group_by(.name)
+                | map(max_by(.created_at))
+                | map({name, url: .archive_download_url})
+              ' > filtered.json
+          
+              COUNT=$(jq 'length' filtered.json)
+          
+              if [[ "$COUNT" -eq 0 ]]; then
+                echo "No previous artifacts found for PR-${PR_ID}. Running fresh tests."
+                exit 0
+              fi
+          
+              for i in $(seq 0 $((COUNT - 1))); do
+                NAME=$(jq -r ".[$i].name" filtered.json)
+                URL=$(jq -r ".[$i].url" filtered.json)
+          
+                echo "Processing artifact: $NAME"
+                TARGET_DIR="artifacts/pr-${PR_ID}/$NAME"
+                mkdir -p "$TARGET_DIR"
+          
+                if [[ "$URL" == https://* ]]; then
+                  curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                    -o "$TARGET_DIR/test-results.zip" "$URL"
+                  unzip -o "$TARGET_DIR/test-results.zip" -d "$TARGET_DIR"
+                  echo "Extracted contents of $NAME:"
+                  find "$TARGET_DIR" -type f
+                else
+                  echo "Skipping $NAME: Invalid URL"
+                fi
+              done
+          
+      - name: Set Workflow ID
+        shell: bash
+        run: echo "WORKFLOW_ID=${{ matrix.name }}" >> $GITHUB_ENV
 
-          ARTIFACT_URL=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts" | \
-            jq -r --arg PR "pr-${PR_ID}-test-results" \
-            '[.artifacts[] | select(.name==$PR)] | sort_by(.created_at) | reverse | .[0].archive_download_url')
 
-          if [[ -n "$ARTIFACT_URL" && "$ARTIFACT_URL" != "null" ]]; then
-            echo "Latest artifact found. Downloading..."
-            mkdir -p artifacts/pr-${PR_ID}
-            curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                 -o artifacts/pr-${PR_ID}/test-results.zip "$ARTIFACT_URL"
-            unzip -o artifacts/pr-${PR_ID}/test-results.zip -d artifacts/pr-${PR_ID}
-
-            echo "======================================="
-            echo "Previous Test Results for PR-${PR_ID}:"
-            cat artifacts/pr-${PR_ID}/test_results.json || echo "No previous test results found."
-            echo "======================================="
-          else
-            echo "No previous test results found for PR-${PR_ID}. Running fresh tests."
-          fi
-
+      - name: Print Contents of Retrieved Workflow Artifacts
+        shell: bash
+        run: |
+          echo "Checking all workflow-specific artifact folders under artifacts/pr-${PR_ID}/"
+      
+          for dir in artifacts/pr-${PR_ID}/*; do
+            if [[ -d "$dir" ]]; then
+              echo "--------------------------------------------"
+              echo "Directory: $dir"
+      
+              for file in "$dir"/*; do
+                echo "File: $file"
+                echo "----- CONTENT START -----"
+                cat "$file" || echo "[Failed to read $file]"
+                echo "-----  CONTENT END  -----"
+                echo ""
+              done
+            fi
+          done
+      
+            
+            
       - name: Extract Failed and Passed Tests from Previous Run
         shell: bash
         run: |
-          mkdir -p artifacts/pr-${PR_ID}
-          PREV_RESULTS="artifacts/pr-${PR_ID}/test_results.json"
-          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
-          ALL_TESTS_FILE="artifacts/pr-${PR_ID}/all_tests.txt"
-          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
-        
-            # Use tox to collect all tests
-          tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep -v "SKIP" | grep "::" > $ALL_TESTS_FILE || true
-          #tox -e ${{ matrix.tox_env }} -- --collect-only -v | grep -v "SKIP" | grep -E "^(.*?)::" | sed -E 's/\s+.*$//' > $ALL_TESTS_FILE || true
-
-          if [[ -f "$PREV_RESULTS" ]]; then
-            echo "Extracting failed test cases from previous run..."
-            cat $PREV_RESULTS | jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' > $FAILED_TESTS_FILE
-          else
-            echo "No previous test results found. Skipping extraction."
-            touch $FAILED_TESTS_FILE
-          fi
-        
-          if [[ -s "$FAILED_TESTS_FILE" ]]; then
-            echo "Failed tests from the previous run:"
-            cat $FAILED_TESTS_FILE
-          else
-            echo "No previously failed tests found."
-          fi
-     
-      - name: Pre-Check for Previously Failed Tests
+                  mkdir -p artifacts/pr-${PR_ID}/${WORKFLOW_ID}
+              
+                  FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/failed_tests.txt"
+                  ALL_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/all_tests.txt"
+                  REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/remaining_tests.txt"
+              
+                  # Collect all tests in the current matrix environment
+                  tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep -v "SKIP" | grep "::" > "$ALL_TESTS_FILE" || true
+                  tox -e ${{ matrix.tox_env }} -- --collect-only --quiet | grep -v "SKIP" | grep "::" > "$ALL_TESTS_FILE" || {
+                    echo "Error: tox failed to collect tests"
+                    exit 1
+                  }
+              
+                  # Initialize failed tests file
+                  > "$FAILED_TESTS_FILE"
+              
+                  for result_file in artifacts/pr-${PR_ID}/*/test_results.json; do
+                    if [[ -f "$result_file" ]]; then
+                      WORKFLOW_DIR=$(basename "$(dirname "$result_file")")
+                      echo "Processing failed tests from $WORKFLOW_DIR"
+                      
+                      echo "### Failed tests from $WORKFLOW_DIR" >> "$FAILED_TESTS_FILE"
+                      jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' "$result_file" >> "$FAILED_TESTS_FILE"
+                      echo "" >> "$FAILED_TESTS_FILE"
+                    fi
+                  done
+              
+                  if [[ -s "$FAILED_TESTS_FILE" ]]; then
+                    echo "==== Failed Tests by Workflow ===="
+                    cat "$FAILED_TESTS_FILE"
+                  else
+                    echo "No failed tests found for this workflow."
+                  fi
+                  
+      - name: Set Workflow ID
         shell: bash
-        run: |
-          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
-          SKIPPED_TESTS_FILE="artifacts/pr-${PR_ID}/skipped_tests.txt"
-      
-          # Only run this check if we have previously failed tests
-          if [[ -s "$FAILED_TESTS_FILE" ]]; then
-            echo "Checking for skipped tests among previously failed tests..."
-            tox -e ${{ matrix.tox_env }} -- --collect-only -v $(cat $FAILED_TESTS_FILE) | grep "SKIP" | grep "::" | sed 's/.*SKIP //g' > $SKIPPED_TESTS_FILE
-
-            # Remove skipped tests from the failed tests list
-            if [[ -s "$SKIPPED_TESTS_FILE" ]]; then
-              echo "Removing skipped tests from the rerun list:"
-              cat $SKIPPED_TESTS_FILE
-              grep -v -F -f $SKIPPED_TESTS_FILE $FAILED_TESTS_FILE > "artifacts/pr-${PR_ID}/filtered_failed_tests.txt"
-              mv "artifacts/pr-${PR_ID}/filtered_failed_tests.txt" $FAILED_TESTS_FILE
-            else
-              echo "No skipped tests found among previously failed tests."
-            fi
-          fi
+        run: echo "WORKFLOW_ID=${{ matrix.name }}" >> $GITHUB_ENV
 
       - name: Generate Failed Test Commands
         shell: bash
         run: |
-          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
-          
-          if [[ -s "$FAILED_TESTS_FILE" ]]; then
-            python scripts/generate_pytest_commands.py --input artifacts/pr-${PR_ID}/remaining_tests.txt --output-dir artifacts --pr-id ${PR_ID} --generate-script --batch-size 50 --tox-env ${{ matrix.tox_env }}
+          OUT_DIR="artifacts"
+          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/failed_tests.txt"
+          if [ -f "$FAILED_TESTS_FILE" ]; then
+            echo "Failed tests file exists at: $FAILED_TESTS_FILE"
+          else
+            echo "Failed tests file does NOT exist."
           fi
-            
+          if [[ -s "$FAILED_TESTS_FILE" ]]; then
+            python scripts/generate_pytest_commands.py \
+              --input "$FAILED_TESTS_FILE" \
+              --output-dir "$OUT_DIR" \
+              --pr-id ${PR_ID} \
+              --workflow-id ${WORKFLOW_ID} \
+              --generate-script \
+              --batch-size 50 \
+              --tox-env ${{ matrix.tox_env }} \
+              --prefix failed
+          fi
+      
+      - name: Debug Generated Failed Test Script
+        shell: bash
+        run: |
+          SCRIPT_PATH="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/run_failed_tests.sh"
+          echo "Looking for script at: $SCRIPT_PATH"
+      
+          if [[ -f "$SCRIPT_PATH" ]]; then
+            echo "Script exists. Showing contents:"
+            cat "$SCRIPT_PATH"
+          else
+            echo "Script not found!"
+            ls -R artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results || echo "Directory missing"
+          fi
+      
       - name: Run Previously Failed Tests First
         shell: bash
         run: |
-          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
+          OUT_DIR="artifacts/pr-${PR_ID}/${WORKFLOW_ID}"
+          # FAILED_TESTS_FILE="${OUT_DIR}/failed_tests.txt"
+          FAILED_SCRIPT="${OUT_DIR}/run_failed_tests.sh"
       
-          if [[ -s "$FAILED_TESTS_FILE" ]]; then
-            echo "Rerunning previously failed tests using tox env ${{ matrix.tox_env }}..."
-            
-            if [[ -f "artifacts/pr-${PR_ID}/run_failed_tests.sh" ]]; then
-              chmod +x artifacts/pr-${PR_ID}/run_failed_tests.sh
-              bash artifacts/pr-${PR_ID}/run_failed_tests.sh
-            else
-              echo "No failed test script generated."
-            fi
+          # echo "DEBUG: Showing contents of $FAILED_TESTS_FILE"
+          # cat "$FAILED_TESTS_FILE" || echo "(File not found)"
+      
+          # if [[ -s "$FAILED_TESTS_FILE" ]]; then
+          echo "Rerunning previously failed tests using tox env ${{ matrix.tox_env }}..."
+          if [[ -f "$FAILED_SCRIPT" ]]; then
+            chmod +x "$FAILED_SCRIPT"
+            bash "$FAILED_SCRIPT"
           else
-            echo "No previously failed tests found."
+            echo "No failed test script found at $FAILED_SCRIPT"
           fi
-        
-
+          # else
+          #   echo "No previously failed tests found."
+          # fi
+      
       - name: Check If Any Tests Failed Again
         shell: bash
         run: |
-          TEMP_RESULTS="artifacts/pr-${PR_ID}/temp_test_results.json"
-          FAILED_AGAIN_FILE="artifacts/pr-${PR_ID}/failed_again.txt"
+          TEMP_RESULTS="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/temp_test_results.json"
+          FAILED_AGAIN_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/failed_again.txt"
           
           if [[ -f "$TEMP_RESULTS" ]]; then
             echo "Analyzing test results..."
@@ -247,10 +321,12 @@ jobs:
             cat $TEMP_RESULTS | jq -r '.tests | map(select(.outcome == "skipped")) | .[].nodeid' > "artifacts/pr-${PR_ID}/skipped_tests_report.txt"
             
             # Report on skipped tests
-            if [[ -s "artifacts/pr-${PR_ID}/skipped_tests_report.txt" ]]; then
+            if [[ -s "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/skipped_tests_report.txt" ]]; then
               echo "The following tests were skipped during execution:"
-              cat "artifacts/pr-${PR_ID}/skipped_tests_report.txt"
+              cat "artifacts/pr-${PR_ID}/${WORKFLOW_ID}/skipped_tests_report.txt"
             fi
+          else
+            echo "No remaining tests to run."
           fi
           
           if [[ -s "$FAILED_AGAIN_FILE" ]]; then
@@ -261,20 +337,34 @@ jobs:
       - name: Identify Remaining Untested Test Cases
         shell: bash
         run: |
-          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/failed_tests.txt"
-          ALL_TESTS_FILE="artifacts/pr-${PR_ID}/all_tests.txt"
-          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
-
-          echo "Finding remaining tests to run..."
-          grep -v -F -f $FAILED_TESTS_FILE $ALL_TESTS_FILE > $REMAINING_TESTS_FILE || true
-
-          if [[ -s "$REMAINING_TESTS_FILE" ]]; then
-            echo "Remaining tests to run:"
-            cat $REMAINING_TESTS_FILE
-          else
-            echo "No remaining tests to run."
-          fi
+          FAILED_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/failed_tests.txt"
+          ALL_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/all_tests.txt"
+          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/remaining_tests.txt"
       
+          echo "==== Debugging ===="
+          echo "Failed Tests File: $FAILED_TESTS_FILE"
+          
+          # Handle empty/missing files
+          touch "$FAILED_TESTS_FILE"  # Ensure file exists even if empty
+      
+          echo "Checking for blank lines in failed_tests.txt"
+          grep '^$' "$FAILED_TESTS_FILE" && echo "Blank lines found!"
+      
+          echo "Normalizing line endings..."
+          sed -i 's/\r$//' "$ALL_TESTS_FILE" || true
+          sed -i 's/\r$//' "$FAILED_TESTS_FILE" || true
+      
+          echo "Removing blank lines from failed_tests.txt"
+          grep -v '^$' "$FAILED_TESTS_FILE" > "${FAILED_TESTS_FILE}.filtered" || true
+          mv "${FAILED_TESTS_FILE}.filtered" "$FAILED_TESTS_FILE"
+      
+          echo "Running grep to find remaining tests..."
+          grep -v -F -f "$FAILED_TESTS_FILE" "$ALL_TESTS_FILE" > "$REMAINING_TESTS_FILE" || true
+      
+          echo "Contents of remaining_tests.txt:"
+          cat "$REMAINING_TESTS_FILE"
+        
+
       - name: Set Workflow ID
         shell: bash
         run: echo "WORKFLOW_ID=${{ matrix.name }}" >> $GITHUB_ENV
@@ -282,12 +372,12 @@ jobs:
       - name: Generate Test Commands
         shell: bash
         run: |
-          python scripts/generate_pytest_commands.py --input artifacts/pr-${PR_ID}/remaining_tests.txt --output-dir artifacts --pr-id ${PR_ID} --workflow-id ${WORKFLOW_ID} --generate-script --batch-size 20 --tox-env ${{ matrix.tox_env }}
+          python scripts/generate_pytest_commands.py --input artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/remaining_tests.txt --output-dir artifacts --pr-id ${PR_ID} --workflow-id ${WORKFLOW_ID} --generate-script --batch-size 20 --tox-env ${{ matrix.tox_env }}
 
       - name: Display Retrieved Test Results
         shell: bash
         run: |
-          RUN_TESTS_FILE="artifacts/pr-${PR_ID}/run_tests.sh"
+          RUN_TESTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/run_tests.sh"
           if [[ -f "$RUN_TESTS_FILE" ]]; then
             echo "Content of run_tests.sh:"
             cat "$RUN_TESTS_FILE"
@@ -298,7 +388,7 @@ jobs:
       - name: Run Remaining Test Cases
         shell: bash
         run: |
-          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/remaining_tests.txt"
+          REMAINING_TESTS_FILE="artifacts/pr-${PR_ID}/pr-${PR_ID}-${WORKFLOW_ID}-test-results/remaining_tests.txt"
           
           if [[ -s "$REMAINING_TESTS_FILE" ]]; then
             echo "Running remaining test cases using tox env ${{ matrix.tox_env }}..."
@@ -315,13 +405,31 @@ jobs:
           else
             echo "No remaining tests to run."
           fi
-              
+
+      - name: Save Test Outcome Lists
+        shell: bash
+        run: |
+          RESULTS_FILE="artifacts/pr-${PR_ID}/${WORKFLOW_ID}/test_results.json"
+          OUT_DIR="artifacts/pr-${PR_ID}/${WORKFLOW_ID}"
+
+          if [[ -f "$RESULTS_FILE" ]]; then
+            echo "Saving categorized test outcome lists for ${WORKFLOW_ID}..."
+
+            for outcome in failed passed skipped xfailed xpassed error; do
+              jq -r --arg outcome "$outcome" '.tests | map(select(.outcome == $outcome)) | .[].nodeid' "$RESULTS_FILE" > "$OUT_DIR/${outcome}_tests.txt"
+              echo "$outcome tests written to $OUT_DIR/${outcome}_tests.txt"
+            done
+          else
+            echo "No results file found at $RESULTS_FILE"
+          fi
+
       - name: Upload New Test Results
         uses: actions/upload-artifact@v4
         with:
           name: pr-${{ env.PR_ID }}-${{ env.WORKFLOW_ID }}-test-results
           path: |
             artifacts/pr-${{ env.PR_ID }}/${{ env.WORKFLOW_ID }}/test_results.json
+            artifacts/pr-${{ env.PR_ID }}/${{ env.WORKFLOW_ID }}/*_tests.txt
             artifacts/pr-${{ env.PR_ID }}/${{ env.WORKFLOW_ID }}/*.sh
                 
   retrieve-results:
@@ -391,9 +499,18 @@ jobs:
       - name: Combine test results
         shell: bash
         run: |
+          echo "Displaying results per workflow..."
+          for result_file in $(find retrieved-results -type f -name "test_results*.json"); do
+            echo "---------------------------------------"
+            echo "Workflow: $(basename $(dirname "$result_file"))"
+            echo "Summary:"
+            jq '.summary' "$result_file"
+            echo "Failed Tests:"
+            jq -r '.tests | map(select(.outcome == "failed")) | .[].nodeid' "$result_file" || echo "No failed tests"
+            echo "---------------------------------------"
+          done
+
           echo "Combining test results from all workflows..."
-          
-          # Initialize combined results file
           cat > retrieved-results/combined_results.json << EOF
           {
             "created": "$(date -Iseconds)",
@@ -413,44 +530,38 @@ jobs:
             "warnings": []
           }
           EOF
-          
-          # Find all test_results.json files
+
           for result_file in $(find retrieved-results -type f -name "test_results*.json"); do
             echo "Processing $result_file"
-            
-            # Check if file is valid JSON
+
             if ! jq empty "$result_file" 2>/dev/null; then
               echo "Warning: $result_file is not valid JSON, skipping"
               continue
             fi
-            
-            # Update summary counts
+
             for metric in passed failed skipped xfailed xpassed error total; do
               count=$(jq -r ".summary.$metric // 0" "$result_file")
               current=$(jq -r ".summary.$metric" retrieved-results/combined_results.json)
               new_count=$((current + count))
               jq --arg metric "$metric" --argjson count "$new_count" '.summary[$metric] = $count' retrieved-results/combined_results.json > temp.json && mv temp.json retrieved-results/combined_results.json
             done
-            
-            # Add tests
+
             jq -s '.[0].tests = (.[0].tests + (.[1].tests // [])); .[0]' retrieved-results/combined_results.json "$result_file" > temp.json && mv temp.json retrieved-results/combined_results.json
-            
-            # Add duration
+
             duration=$(jq -r ".duration // 0" "$result_file")
             current_duration=$(jq -r ".duration" retrieved-results/combined_results.json)
             new_duration=$(echo "$current_duration + $duration" | bc)
             jq --argjson duration "$new_duration" '.duration = $duration' retrieved-results/combined_results.json > temp.json && mv temp.json retrieved-results/combined_results.json
-            
-            # Update exitcode (non-zero takes precedence)
+
             exitcode=$(jq -r ".exitcode // 0" "$result_file")
             current_exitcode=$(jq -r ".exitcode" retrieved-results/combined_results.json)
             if [ "$exitcode" -ne 0 ] && [ "$current_exitcode" -eq 0 ]; then
               jq --argjson exitcode "$exitcode" '.exitcode = $exitcode' retrieved-results/combined_results.json > temp.json && mv temp.json retrieved-results/combined_results.json
             fi
           done
-          
-          # Create a copy as test_results.json for backward compatibility
+
           cp retrieved-results/combined_results.json retrieved-results/test_results.json
+
       
       - name: Display Combined Test Results
         shell: bash
@@ -469,28 +580,3 @@ jobs:
           name: pr-${{ env.PR_ID }}-combined-test-results
           path: retrieved-results/combined_results.json
 
-  # # retrieve-results:
-  #   needs: run-tests
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Get PR ID
-  #       if: github.event_name == 'pull_request'
-  #       run: echo "PR_ID=${{ github.event.number }}" >> $GITHUB_ENV
-
-  #     - name: Set Default Folder for Non-PR Runs
-  #       if: github.event_name != 'pull_request'
-  #       run: echo "PR_ID=main" >> $GITHUB_ENV
-
-  #     - name: Download Test Results
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: pr-${{ env.PR_ID }}-test-results
-  #         path: retrieved-results
-
-  #     - name: Display Retrieved Test Results
-  #       shell: bash
-  #       run: |
-  #         echo "======================================="
-  #         echo "Retrieved Test Results from PR ${PR_ID}:"
-  #         cat retrieved-results/test_results.json
-  #         echo "======================================="

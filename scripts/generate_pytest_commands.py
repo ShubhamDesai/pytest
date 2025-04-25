@@ -5,7 +5,7 @@ import glob
 import argparse
 from pathlib import Path
 
-def combine_test_results(pr_id, workflow_id, output_dir="artifacts"):
+def combine_test_results(pr_id, workflow_id, output_dir="artifacts", prefix=''):
     """
     Combine all batch test results into a single JSON file.
     
@@ -85,7 +85,10 @@ def combine_test_results(pr_id, workflow_id, output_dir="artifacts"):
             print(f"Error processing {batch_file}: {e}")
     
     # Save combined results
-    combined_file = output_path / "test_results.json"
+    if prefix=="failed":
+        combined_file = output_path / "temp_test_results.json"
+    else:
+        combined_file = output_path / "test_results.json"
     with open(combined_file, 'w') as f:
         json.dump(combined_results, f, indent=2)
     
@@ -188,7 +191,7 @@ def create_test_batch_json(test_list, output_dir, pr_id, workflow_id, batch_size
     
     return str(manifest_file)
 
-def generate_bash_commands(manifest_file, tox_env, workflow_id):
+def generate_bash_commands(manifest_file, tox_env, workflow_id, prefix):
     with open(manifest_file, 'r') as f:
         manifest = json.load(f)
     
@@ -242,7 +245,10 @@ def generate_bash_commands(manifest_file, tox_env, workflow_id):
     
     # Add command to combine all batch results into a single file
     commands.append("# Combine all batch results into a single file")
-    commands.append(f"python scripts/generate_pytest_commands.py --combine-results --output-dir=artifacts --pr-id={manifest['pr_id']} --workflow-id={workflow_id}")
+    if prefix == "failed":
+        commands.append(f"python scripts/generate_pytest_commands.py --combine-results --output-dir=artifacts --pr-id={manifest['pr_id']} --workflow-id={workflow_id} --prefix=failed")
+    else:
+        commands.append(f"python scripts/generate_pytest_commands.py --combine-results --output-dir=artifacts --pr-id={manifest['pr_id']} --workflow-id={workflow_id}")
     commands.append("")
     
     return "\n".join(commands)
@@ -258,11 +264,10 @@ def main():
     parser.add_argument('--prefix', default='', help='Prefix for output files (e.g., "failed" for failed tests)')
     parser.add_argument('--tox-env', default='', help='Tox environment to use')
     parser.add_argument('--combine-results', action='store_true', help='Combine batch results into a single file')
-    
     args = parser.parse_args()
     
     if args.combine_results:
-        combine_test_results(args.pr_id, args.workflow_id, args.output_dir)
+        combine_test_results(args.pr_id, args.workflow_id, args.output_dir, args.prefix)
         return
     
     if not args.input:
@@ -286,7 +291,7 @@ def main():
     
     # Generate bash script if requested
     if args.generate_script:
-        bash_commands = generate_bash_commands(manifest_file, args.tox_env, args.workflow_id)
+        bash_commands = generate_bash_commands(manifest_file, args.tox_env, args.workflow_id, args.prefix)
         script_path = Path(args.output_dir) / f"pr-{args.pr_id}" / args.workflow_id / f"run_{args.prefix}_tests.sh" if args.prefix else Path(args.output_dir) / f"pr-{args.pr_id}" / args.workflow_id / "run_tests.sh"
         
         with open(script_path, 'w') as f:
