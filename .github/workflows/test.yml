@@ -423,9 +423,6 @@ jobs:
             echo "No results file found at $RESULTS_FILE"
           fi
 
-      
-          
-          
       - name: Upload New Test Results
         uses: actions/upload-artifact@v4
         with:
