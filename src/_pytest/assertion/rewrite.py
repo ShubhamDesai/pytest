@@ -144,7 +144,7 @@ class AssertionRewritingHook(importlib.abc.MetaPathFinder, importlib.abc.Loader)
     ) -> types.ModuleType | None:
         return None  # default behaviour is fine
 
-    def get_code(self, fullname: str) -> types.CodeType
+    def get_code(self, fullname: str) -> types.CodeType:
         assert self.fn is not None
         fn = Path(self.fn)
         state = self.config.stash[assertstate_key]
@@ -183,12 +183,12 @@ class AssertionRewritingHook(importlib.abc.MetaPathFinder, importlib.abc.Loader)
             state.trace(f"found cached rewritten pyc for {fn}")
 
         return co
-    
+
     def exec_module(self, module: types.ModuleType) -> None:
         module_name = module.__name__
-        
+
         self._rewritten_names[module_name] = fn
-        
+
         exec(self.get_code(module_name), module.__dict__)
 
     def _early_rewrite_bailout(self, name: str, state: AssertionState) -> bool:
