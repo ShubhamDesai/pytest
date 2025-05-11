@@ -1,3 +1,4 @@
+
 """Rewrite assertion AST to produce nice error messages."""
 
 from __future__ import annotations
@@ -80,7 +81,7 @@ class AssertionRewritingHook(importlib.abc.MetaPathFinder, importlib.abc.Loader)
         self._basenames_to_check_rewrite = {"conftest"}
         self._marked_for_rewrite_cache: dict[str, bool] = {}
         self._session_paths_checked = False
-        self.fn: str | None = None
+        self._fns: dict[str, str] = {}
 
     def set_session(self, session: Session | None) -> None:
         self.session = session
@@ -127,7 +128,7 @@ class AssertionRewritingHook(importlib.abc.MetaPathFinder, importlib.abc.Loader)
         ):
             return None
         else:
-            self.fn = fn = spec.origin
+            self._fns[name] = fn = spec.origin
 
         if not self._should_rewrite(name, fn, state):
             return None
@@ -145,8 +146,8 @@ class AssertionRewritingHook(importlib.abc.MetaPathFinder, importlib.abc.Loader)
         return None  # default behaviour is fine
 
     def get_code(self, fullname: str) -> types.CodeType:
-        assert self.fn is not None
-        fn = Path(self.fn)
+        assert fullname in self._fns
+        fn = Path(self._fns[fullname])
         state = self.config.stash[assertstate_key]
 
         # The requested module looks like a test file, so rewrite it. This is
@@ -187,7 +188,13 @@ class AssertionRewritingHook(importlib.abc.MetaPathFinder, importlib.abc.Loader)
     def exec_module(self, module: types.ModuleType) -> None:
         module_name = module.__name__
 
-        self._rewritten_names[module_name] = fn
+        assert (
+            module_name in self._fns
+            and module.__spec__ is not None
+            and module.__spec__.origin == self._fns[module_name]
+        )
+
+        self._rewritten_names[module_name] = Path(self._fns[module_name])
 
         exec(self.get_code(module_name), module.__dict__)
 
