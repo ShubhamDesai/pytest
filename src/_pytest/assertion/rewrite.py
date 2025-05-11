@@ -216,8 +216,8 @@ class AssertionRewritingHook(importlib.abc.MetaPathFinder, importlib.abc.Loader)
             if fnmatch_ex(pat, path):
                 return False
 
-        rootPath=os.getcwd()
-        if not path.is_relative_to(rootPath):
+        root_path=os.getcwd()
+        if not path.is_relative_to(root_path):
             return True
 
         if self._is_marked_for_rewrite(name, state):
