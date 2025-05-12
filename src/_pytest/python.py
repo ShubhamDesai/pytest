@@ -6,6 +6,12 @@ from __future__ import annotations
 import abc
 from collections import Counter
 from collections import defaultdict
+from collections.abc import Callable
+from collections.abc import Generator
+from collections.abc import Iterable
+from collections.abc import Iterator
+from collections.abc import Mapping
+from collections.abc import Sequence
 import dataclasses
 import enum
 import fnmatch
@@ -14,18 +20,12 @@ import inspect
 import itertools
 import os
 from pathlib import Path
+import re
 import types
 from typing import Any
-from typing import Callable
-from typing import Dict
 from typing import final
-from typing import Generator
-from typing import Iterable
-from typing import Iterator
 from typing import Literal
-from typing import Mapping
-from typing import Pattern
-from typing import Sequence
+from typing import NoReturn
 from typing import TYPE_CHECKING
 import warnings
 
@@ -57,7 +57,9 @@ from _pytest.fixtures import FuncFixtureInfo
 from _pytest.fixtures import get_scope_node
 from _pytest.main import Session
 from _pytest.mark import ParameterSet
+from _pytest.mark.structures import _HiddenParam
 from _pytest.mark.structures import get_unpacked_marks
+from _pytest.mark.structures import HIDDEN_PARAM
 from _pytest.mark.structures import Mark
 from _pytest.mark.structures import MarkDecorator
 from _pytest.mark.structures import normalize_mark_list
@@ -398,6 +400,7 @@ class PyCollector(PyobjMixin, nodes.Collector, abc.ABC):
         # __dict__ is definition ordered.
         seen: set[str] = set()
         dict_values: list[list[nodes.Item | nodes.Collector]] = []
+        collect_imported_tests = self.session.config.getini("collect_imported_tests")
         ihook = self.ihook
         for dic in dicts:
             values: list[nodes.Item | nodes.Collector] = []
@@ -409,6 +412,13 @@ class PyCollector(PyobjMixin, nodes.Collector, abc.ABC):
                 if name in seen:
                     continue
                 seen.add(name)
+
+                if not collect_imported_tests and isinstance(self, Module):
+                    # Do not collect functions and classes from other modules.
+                    if inspect.isfunction(obj) or inspect.isclass(obj):
+                        if obj.__module__ != self._getobj().__name__:
+                            continue
+
                 res = ihook.pytest_pycollect_makeitem(
                     collector=self, name=name, obj=obj
                 )
@@ -432,7 +442,7 @@ class PyCollector(PyobjMixin, nodes.Collector, abc.ABC):
         assert modulecol is not None
         module = modulecol.obj
         clscol = self.getparent(Class)
-        cls = clscol and clscol.obj or None
+        cls = (clscol and clscol.obj) or None
 
         definition = FunctionDefinition.from_parent(self, name=name, callobj=funcobj)
         fixtureinfo = definition._fixtureinfo
@@ -466,7 +476,7 @@ class PyCollector(PyobjMixin, nodes.Collector, abc.ABC):
             fixtureinfo.prune_dependency_tree()
 
             for callspec in metafunc._calls:
-                subname = f"{name}[{callspec.id}]"
+                subname = f"{name}[{callspec.id}]" if callspec._idlist else name
                 yield Function.from_parent(
                     self,
                     name=subname,
@@ -849,12 +859,12 @@ class IdMaker:
 
     __slots__ = (
         "argnames",
-        "parametersets",
+        "config",
+        "func_name",
         "idfn",
         "ids",
-        "config",
         "nodeid",
-        "func_name",
+        "parametersets",
     )
 
     # The argnames of the parametrization.
@@ -877,7 +887,7 @@ class IdMaker:
     # Used only for clearer error messages.
     func_name: str | None
 
-    def make_unique_parameterset_ids(self) -> list[str]:
+    def make_unique_parameterset_ids(self) -> list[str | _HiddenParam]:
         """Make a unique identifier for each ParameterSet, that may be used to
         identify the parametrization in a node ID.
 
@@ -898,6 +908,8 @@ class IdMaker:
             # Suffix non-unique IDs to make them unique.
             for index, id in enumerate(resolved_ids):
                 if id_counts[id] > 1:
+                    if id is HIDDEN_PARAM:
+                        self._complain_multiple_hidden_parameter_sets()
                     suffix = ""
                     if id and id[-1].isdigit():
                         suffix = "_"
@@ -907,20 +919,26 @@ class IdMaker:
                         new_id = f"{id}{suffix}{id_suffixes[id]}"
                     resolved_ids[index] = new_id
                     id_suffixes[id] += 1
-        assert len(resolved_ids) == len(
-            set(resolved_ids)
-        ), f"Internal error: {resolved_ids=}"
+        assert len(resolved_ids) == len(set(resolved_ids)), (
+            f"Internal error: {resolved_ids=}"
+        )
         return resolved_ids
 
-    def _resolve_ids(self) -> Iterable[str]:
+    def _resolve_ids(self) -> Iterable[str | _HiddenParam]:
         """Resolve IDs for all ParameterSets (may contain duplicates)."""
         for idx, parameterset in enumerate(self.parametersets):
             if parameterset.id is not None:
                 # ID provided directly - pytest.param(..., id="...")
-                yield _ascii_escaped_by_config(parameterset.id, self.config)
+                if parameterset.id is HIDDEN_PARAM:
+                    yield HIDDEN_PARAM
+                else:
+                    yield _ascii_escaped_by_config(parameterset.id, self.config)
             elif self.ids and idx < len(self.ids) and self.ids[idx] is not None:
                 # ID provided in the IDs list - parametrize(..., ids=[...]).
-                yield self._idval_from_value_required(self.ids[idx], idx)
+                if self.ids[idx] is HIDDEN_PARAM:
+                    yield HIDDEN_PARAM
+                else:
+                    yield self._idval_from_value_required(self.ids[idx], idx)
             else:
                 # ID not provided - generate it.
                 yield "-".join(
@@ -974,7 +992,7 @@ class IdMaker:
             return _ascii_escaped_by_config(val, self.config)
         elif val is None or isinstance(val, (float, int, bool, complex)):
             return str(val)
-        elif isinstance(val, Pattern):
+        elif isinstance(val, re.Pattern):
             return ascii_escaped(val.pattern)
         elif val is NOTSET:
             # Fallback to default. Note that NOTSET is an enum.Enum.
@@ -994,12 +1012,7 @@ class IdMaker:
             return id
 
         # Fail.
-        if self.func_name is not None:
-            prefix = f"In {self.func_name}: "
-        elif self.nodeid is not None:
-            prefix = f"In {self.nodeid}: "
-        else:
-            prefix = ""
+        prefix = self._make_error_prefix()
         msg = (
             f"{prefix}ids contains unsupported value {saferepr(val)} (type: {type(val)!r}) at index {idx}. "
             "Supported types are: str, bytes, int, float, complex, bool, enum, regex or anything with a __name__."
@@ -1011,6 +1024,21 @@ class IdMaker:
         """Make an ID for a parameter in a ParameterSet from the argument name
         and the index of the ParameterSet."""
         return str(argname) + str(idx)
+
+    def _complain_multiple_hidden_parameter_sets(self) -> NoReturn:
+        fail(
+            f"{self._make_error_prefix()}multiple instances of HIDDEN_PARAM "
+            "cannot be used in the same parametrize call, "
+            "because the tests names need to be unique."
+        )
+
+    def _make_error_prefix(self) -> str:
+        if self.func_name is not None:
+            return f"In {self.func_name}: "
+        elif self.nodeid is not None:
+            return f"In {self.nodeid}: "
+        else:
+            return ""
 
 
 @final
@@ -1040,7 +1068,7 @@ class CallSpec2:
         *,
         argnames: Iterable[str],
         valset: Iterable[object],
-        id: str,
+        id: str | _HiddenParam,
         marks: Iterable[Mark | MarkDecorator],
         scope: Scope,
         param_index: int,
@@ -1058,7 +1086,7 @@ class CallSpec2:
             params=params,
             indices=indices,
             _arg2scope=arg2scope,
-            _idlist=[*self._idlist, id],
+            _idlist=self._idlist if id is HIDDEN_PARAM else [*self._idlist, id],
             marks=[*self.marks, *normalize_mark_list(marks)],
         )
 
@@ -1078,7 +1106,7 @@ def get_direct_param_fixture_func(request: FixtureRequest) -> Any:
 
 
 # Used for storing pseudo fixturedefs for direct parametrization.
-name2pseudofixturedef_key = StashKey[Dict[str, FixtureDef[Any]]]()
+name2pseudofixturedef_key = StashKey[dict[str, FixtureDef[Any]]]()
 
 
 @final
@@ -1182,6 +1210,11 @@ class Metafunc:
             ``bool``, or ``None``.
             They are mapped to the corresponding index in ``argvalues``.
             ``None`` means to use the auto-generated id.
+
+            .. versionadded:: 8.4
+                :ref:`hidden-param` means to hide the parameter set
+                from the test name. Can only be used at most 1 time, as
+                test names need to be unique.
 
             If it is a callable it will be called for each entry in
             ``argvalues``, and the return value is used as part of the
@@ -1315,7 +1348,7 @@ class Metafunc:
         ids: Iterable[object | None] | Callable[[Any], object | None] | None,
         parametersets: Sequence[ParameterSet],
         nodeid: str,
-    ) -> list[str]:
+    ) -> list[str | _HiddenParam]:
         """Resolve the actual ids for the given parameter sets.
 
         :param argnames:
