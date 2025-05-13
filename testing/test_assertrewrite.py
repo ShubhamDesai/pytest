@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Generator
+from collections.abc import Mapping
 import dis
 import errno
 from functools import partial
@@ -17,12 +19,8 @@ import stat
 import sys
 import textwrap
 from typing import cast
-from typing import Generator
-from typing import Mapping
 from unittest import mock
 import zipfile
-
-from _pytest.monkeypatch import MonkeyPatch
 
 import _pytest._code
 from _pytest._io.saferepr import DEFAULT_REPR_MAX_SIZE
@@ -977,6 +975,23 @@ class TestAssertionRewrite:
         assert "UnicodeDecodeError" not in msg
         assert "UnicodeEncodeError" not in msg
 
+    def test_assert_fixture(self, pytester: Pytester) -> None:
+        pytester.makepyfile(
+            """\
+        import pytest
+        @pytest.fixture
+        def fixt():
+            return 42
+
+        def test_something():  # missing "fixt" argument
+            assert fixt == 42
+            """
+        )
+        result = pytester.runpytest()
+        result.stdout.fnmatch_lines(
+            ["*assert <pytest_fixture(<function fixt at *>)> == 42*"]
+        )
+
 
 class TestRewriteOnImport:
     def test_pycache_is_a_file(self, pytester: Pytester) -> None:
@@ -1020,10 +1035,6 @@ class TestRewriteOnImport:
         )
         assert pytester.runpytest().ret == ExitCode.NO_TESTS_COLLECTED
 
-    @pytest.mark.skipif(
-        sys.version_info < (3, 9),
-        reason="importlib.resources.files was introduced in 3.9",
-    )
     def test_load_resource_via_files_with_rewrite(self, pytester: Pytester) -> None:
         example = pytester.path.joinpath("demo") / "example"
         init = pytester.path.joinpath("demo") / "__init__.py"
@@ -1944,7 +1955,6 @@ class TestEarlyRewriteBailout:
             assert hook.find_spec("file") is not None
             assert self.find_spec_calls == ["file"]
 
-
     def test_assert_excluded_rootpath(
         self, pytester: Pytester, hook: AssertionRewritingHook, monkeypatch
     ) -> None:
@@ -1959,11 +1969,10 @@ class TestEarlyRewriteBailout:
                 """
             }
         )
-        root_path= "{0}/tests".format(os.getcwd())
+        root_path = f"{os.getcwd()}/tests"
         monkeypatch.setattr("os.getcwd", lambda: root_path)
         with mock.patch.object(hook, "fnpats", ["*.py"]):
             assert hook.find_spec("file") is None
-
 
     @pytest.mark.skipif(
         sys.platform.startswith("win32"), reason="cannot remove cwd on Windows"
