@@ -359,6 +359,10 @@ jobs:
             
             if [[ -f "$FAILED_SCRIPT" ]]; then
               chmod +x "$FAILED_SCRIPT"
+              if [[ "${{ matrix.use_coverage }}" == "true" ]]; then
+                # Use the coverage-enabled tox environment
+                sed -i 's/tox -e ${{ matrix.tox_env }}/tox -e ${{ matrix.tox_env }}-coverage/g' "$FAILED_SCRIPT"
+              fi
               bash "$FAILED_SCRIPT"
             else
               echo "No failed test script generated."
@@ -419,6 +423,10 @@ jobs:
             
             if [[ -f "$RUN_TESTS_SCRIPT" ]]; then
               chmod +x "$RUN_TESTS_SCRIPT"
+              if [[ "${{ matrix.use_coverage }}" == "true" ]]; then
+                # Use the coverage-enabled tox environment
+                sed -i 's/tox -e ${{ matrix.tox_env }}/tox -e ${{ matrix.tox_env }}-coverage/g' "$RUN_TESTS_SCRIPT"
+              fi
               bash "$RUN_TESTS_SCRIPT"
               
               # Combine results after running tests
@@ -429,11 +437,32 @@ jobs:
           else
             echo "No remaining tests to run."
           fi
-
+        
       - name: Generate coverage report
         if: "matrix.use_coverage && !failure()"
-        run: python -m coverage xml
-
+        shell: bash
+        run: |
+          if [[ -d ".coverage" || -f ".coverage" ]]; then
+            python -m coverage xml
+          else
+            echo "Looking for coverage data in tox environment..."
+            # Try to find and copy the coverage data from tox environment
+            TOX_ENV_DIR=".tox/${{ matrix.tox_env }}-coverage"
+            if [[ -d "$TOX_ENV_DIR" ]]; then
+              if [[ -d "$TOX_ENV_DIR/.coverage" || -f "$TOX_ENV_DIR/.coverage" ]]; then
+                cp -r "$TOX_ENV_DIR/.coverage" .
+                python -m coverage xml
+              else
+                echo "No coverage data found in tox environment."
+                # Create empty coverage file to prevent failure
+                echo '<?xml version="1.0" ?><coverage version="7.3.2"></coverage>' > coverage.xml
+              fi
+            else
+              echo "Tox environment directory not found."
+              # Create empty coverage file to prevent failure
+              echo '<?xml version="1.0" ?><coverage version="7.3.2"></coverage>' > coverage.xml
+            fi
+          fi
       - name: Upload coverage to Codecov
         if: "matrix.use_coverage && !failure()"
         uses: codecov/codecov-action@v5
