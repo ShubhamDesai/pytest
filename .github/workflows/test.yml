@@ -282,7 +282,7 @@ jobs:
       - name: Generate Test Commands
         shell: bash
         run: |
-          python scripts/generate_pytest_commands.py --input artifacts/pr-${PR_ID}/remaining_tests.txt --output-dir artifacts --pr-id ${PR_ID} --workflow-id ${WORKFLOW_ID} --generate-script --batch-size 20 --tox-env ${{ matrix.tox_env }}
+          python scripts/generate_pytest_commands.py --input artifacts/pr-${PR_ID}/remaining_tests.txt --output-dir artifacts --pr-id ${PR_ID} --workflow-id ${WORKFLOW_ID} --generate-script --batch-size 50 --tox-env ${{ matrix.tox_env }}
 
       - name: Display Retrieved Test Results
         shell: bash
