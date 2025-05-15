@@ -172,25 +172,25 @@ jobs:
             os: ubuntu-latest
             tox_env: "doctesting"
             use_coverage: true
-      continue-on-error: >-
-        ${{
-          contains(
-            fromJSON(
-              '[
-                "windows-py39-pluggy",
-                "windows-py313",
-                "ubuntu-py39-pluggy",
-                "ubuntu-py39-freeze",
-                "ubuntu-py313",
-                "macos-py39",
-                "macos-py313"
-              ]'
-            ),
-            matrix.name
-          )
-          && true
-          || false
-        }}
+    continue-on-error: >-
+      ${{
+        contains(
+          fromJSON(
+            '[
+              "windows-py39-pluggy",
+              "windows-py313",
+              "ubuntu-py39-pluggy",
+              "ubuntu-py39-freeze",
+              "ubuntu-py313",
+              "macos-py39",
+              "macos-py313"
+            ]'
+          ),
+          matrix.name
+        )
+        && true
+        || false
+      }}
     steps:
       - uses: actions/checkout@v4
         with:
