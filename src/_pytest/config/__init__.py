@@ -5,6 +5,11 @@ from __future__ import annotations
 
 import argparse
 import collections.abc
+from collections.abc import Callable
+from collections.abc import Generator
+from collections.abc import Iterable
+from collections.abc import Iterator
+from collections.abc import Sequence
 import contextlib
 import copy
 import dataclasses
@@ -22,17 +27,11 @@ from textwrap import dedent
 import types
 from types import FunctionType
 from typing import Any
-from typing import Callable
 from typing import cast
 from typing import Final
 from typing import final
-from typing import Generator
 from typing import IO
-from typing import Iterable
-from typing import Iterator
-from typing import Sequence
 from typing import TextIO
-from typing import Type
 from typing import TYPE_CHECKING
 import warnings
 
@@ -71,6 +70,7 @@ from _pytest.warning_types import warn_explicit_for
 
 
 if TYPE_CHECKING:
+    from _pytest.assertions.rewrite import AssertionRewritingHook
     from _pytest.cacheprovider import Cache
     from _pytest.terminal import TerminalReporter
 
@@ -265,11 +265,11 @@ default_plugins = (
     "setuponly",
     "setupplan",
     "stepwise",
+    "unraisableexception",
+    "threadexception",
     "warnings",
     "logging",
     "reports",
-    "unraisableexception",
-    "threadexception",
     "faulthandler",
 )
 
@@ -839,9 +839,9 @@ class PytestPluginManager(PluginManager):
         # "terminal" or "capture".  Those plugins are registered under their
         # basename for historic purposes but must be imported with the
         # _pytest prefix.
-        assert isinstance(
-            modname, str
-        ), f"module name as text required, got {modname!r}"
+        assert isinstance(modname, str), (
+            f"module name as text required, got {modname!r}"
+        )
         if self.is_blocked(modname) or self.get_plugin(modname) is not None:
             return
 
@@ -1113,9 +1113,7 @@ class Config:
     def _do_configure(self) -> None:
         assert not self._configured
         self._configured = True
-        with warnings.catch_warnings():
-            warnings.simplefilter("default")
-            self.hook.pytest_configure.call_historic(kwargs=dict(config=self))
+        self.hook.pytest_configure.call_historic(kwargs=dict(config=self))
 
     def _ensure_unconfigure(self) -> None:
         try:
@@ -1274,6 +1272,10 @@ class Config:
         """
         ns, unknown_args = self._parser.parse_known_and_unknown_args(args)
         mode = getattr(ns, "assertmode", "plain")
+
+        disable_autoload = getattr(ns, "disable_plugin_autoload", False) or bool(
+            os.environ.get("PYTEST_DISABLE_PLUGIN_AUTOLOAD")
+        )
         if mode == "rewrite":
             import _pytest.assertion
 
@@ -1282,16 +1284,18 @@ class Config:
             except SystemError:
                 mode = "plain"
             else:
-                self._mark_plugins_for_rewrite(hook)
+                self._mark_plugins_for_rewrite(hook, disable_autoload)
         self._warn_about_missing_assertion(mode)
 
-    def _mark_plugins_for_rewrite(self, hook) -> None:
+    def _mark_plugins_for_rewrite(
+        self, hook: AssertionRewritingHook, disable_autoload: bool
+    ) -> None:
         """Given an importhook, mark for rewrite any top-level
         modules or packages in the distribution package for
         all pytest plugins."""
         self.pluginmanager.rewrite_hook = hook
 
-        if os.environ.get("PYTEST_DISABLE_PLUGIN_AUTOLOAD"):
+        if disable_autoload:
             # We don't autoload from distribution package entry points,
             # no need to continue.
             return
@@ -1396,10 +1400,15 @@ class Config:
         self._consider_importhook(args)
         self._configure_python_path()
         self.pluginmanager.consider_preparse(args, exclude_only=False)
-        if not os.environ.get("PYTEST_DISABLE_PLUGIN_AUTOLOAD"):
-            # Don't autoload from distribution package entry point. Only
-            # explicitly specified plugins are going to be loaded.
+        if (
+            not os.environ.get("PYTEST_DISABLE_PLUGIN_AUTOLOAD")
+            and not self.known_args_namespace.disable_plugin_autoload
+        ):
+            # Autoloading from distribution package entry point has
+            # not been disabled.
             self.pluginmanager.load_setuptools_entrypoints("pytest11")
+        # Otherwise only plugins explicitly specified in PYTEST_PLUGINS
+        # are going to be loaded.
         self.pluginmanager.consider_env()
 
         self.known_args_namespace = self._parser.parse_known_args(
@@ -1422,7 +1431,7 @@ class Config:
         except ConftestImportFailure as e:
             if self.known_args_namespace.help or self.known_args_namespace.version:
                 # we don't want to prevent --help/--version to work
-                # so just let is pass and print a warning at the end
+                # so just let it pass and print a warning at the end
                 self.issue_config_time_warning(
                     PytestConfigWarning(f"could not load initial conftests: {e.path}"),
                     stacklevel=2,
@@ -1506,9 +1515,9 @@ class Config:
 
     def parse(self, args: list[str], addopts: bool = True) -> None:
         # Parse given cmdline arguments into this config object.
-        assert (
-            self.args == []
-        ), "can only parse cmdline args at most once per Config object"
+        assert self.args == [], (
+            "can only parse cmdline args at most once per Config object"
+        )
         self.hook.pytest_addhooks.call_historic(
             kwargs=dict(pluginmanager=self.pluginmanager)
         )
@@ -1590,6 +1599,8 @@ class Config:
         ``paths``, ``pathlist``, ``args`` and ``linelist`` : empty list ``[]``
         ``bool`` : ``False``
         ``string`` : empty string ``""``
+        ``int`` : ``0``
+        ``float`` : ``0.0``
 
         If neither the ``default`` nor the ``type`` parameter is passed
         while registering the configuration through
@@ -1608,9 +1619,11 @@ class Config:
 
     # Meant for easy monkeypatching by legacypath plugin.
     # Can be inlined back (with no cover removed) once legacypath is gone.
-    def _getini_unknown_type(self, name: str, type: str, value: str | list[str]):
-        msg = f"unknown configuration type: {type}"
-        raise ValueError(msg, value)  # pragma: no cover
+    def _getini_unknown_type(self, name: str, type: str, value: object):
+        msg = (
+            f"Option {name} has unknown configuration type {type} with value {value!r}"
+        )
+        raise ValueError(msg)  # pragma: no cover
 
     def _getini(self, name: str):
         try:
@@ -1659,6 +1672,18 @@ class Config:
             return _strtobool(str(value).strip())
         elif type == "string":
             return value
+        elif type == "int":
+            if not isinstance(value, str):
+                raise TypeError(
+                    f"Expected an int string for option {name} of type integer, but got: {value!r}"
+                ) from None
+            return int(value)
+        elif type == "float":
+            if not isinstance(value, str):
+                raise TypeError(
+                    f"Expected a float string for option {name} of type float, but got: {value!r}"
+                ) from None
+            return float(value)
         elif type is None:
             return value
         else:
@@ -1956,6 +1981,13 @@ def parse_warning_filter(
             ) from None
     else:
         lineno = 0
+    try:
+        re.compile(message)
+        re.compile(module)
+    except re.error as e:
+        raise UsageError(
+            error_template.format(error=f"Invalid regex {e.pattern!r}: {e}")
+        ) from None
     return action, message, category, module, lineno
 
 
@@ -1978,7 +2010,7 @@ def _resolve_warning_category(category: str) -> type[Warning]:
     cat = getattr(m, klass)
     if not issubclass(cat, Warning):
         raise UsageError(f"{cat} is not a Warning subclass")
-    return cast(Type[Warning], cat)
+    return cast(type[Warning], cat)
 
 
 def apply_warning_filters(
