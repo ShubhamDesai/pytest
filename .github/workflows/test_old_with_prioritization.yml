@@ -1,22 +1,19 @@
 name: test
-true:
+on:
   push:
     branches:
-    - main
-    - '[0-9]+.[0-9]+.x'
-    - test-me-*
+      - main
+      - "[0-9]+.[0-9]+.x"
+      - pr-fails-simulation
     tags:
-    - '[0-9]+.[0-9]+.[0-9]+'
-    - '[0-9]+.[0-9]+.[0-9]+rc[0-9]+'
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+rc[0-9]+"
+
   pull_request:
     branches:
-    - main
-    - '[0-9]+.[0-9]+.x'
-    types:
-    - opened
-    - synchronize
-    - reopened
-    - ready_for_review
+      - main
+      - "[0-9]+.[0-9]+.x"
+    types: [opened, synchronize, reopened, ready_for_review]
 env:
   PYTEST_ADDOPTS: --color=yes
 concurrency:
