@@ -146,11 +146,6 @@ jobs:
             python: "pypy-3.9"
             os: ubuntu-latest
             tox_env: "pypy3-xdist"
-          - name: "macos-py39"
-            python: "3.9"
-            os: macos-latest
-            tox_env: "py39-xdist"
-            use_coverage: true
           - name: "macos-py310"
             python: "3.10"
             os: macos-latest
