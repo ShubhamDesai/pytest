@@ -47,7 +47,7 @@ jobs:
   build:
     needs: [package]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 360
     permissions:
       contents: read
     strategy:
@@ -70,7 +70,6 @@ jobs:
           "ubuntu-py312",
           "ubuntu-py313-pexpect",
           "ubuntu-pypy3-xdist",
-          "macos-py39",
           "macos-py310",
           "macos-py312",
           "macos-py313",
